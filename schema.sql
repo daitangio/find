@@ -49,7 +49,7 @@ USING fts5(
   url,
   content='pages',
   content_rowid='id',
-  tokenize='unicode61'
+  tokenize='porter unicode61'
 );
 
 -- Keep FTS in sync with pages
