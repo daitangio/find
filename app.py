@@ -10,9 +10,10 @@ from flask import Flask, g, redirect, render_template, request, url_for, abort
 
 from jinja2 import DictLoader
 
-DB_PATH = os.environ.get("SEARCH_DB", os.path.join(os.environ.get("HOME"),".find.db"))
+DB_PATH = os.environ.get("SEARCH_DB", os.path.join(os.environ.get("HOME"), ".find.db"))
 
 app = Flask(__name__)
+
 
 # -------------------------
 # DB helpers
@@ -27,11 +28,13 @@ def get_db() -> sqlite3.Connection:
         g.db = conn
     return g.db
 
+
 @app.teardown_appcontext
 def close_db(_exc: Exception | None) -> None:
     conn = g.pop("db", None)
     if conn is not None:
         conn.close()
+
 
 def fts5_available(conn: sqlite3.Connection) -> bool:
     # Quick sanity check: will fail if SQLite not compiled with FTS5
@@ -41,6 +44,7 @@ def fts5_available(conn: sqlite3.Connection) -> bool:
         return True
     except sqlite3.OperationalError:
         return False
+
 
 # -------------------------
 # Search logic
@@ -53,7 +57,10 @@ class SearchResult:
     snippet: str
     rank: str
 
-def search_pages(conn: sqlite3.Connection, query: str, limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
+
+def search_pages(
+    conn: sqlite3.Connection, query: str, limit: int = 10, offset: int = 0
+) -> tuple[list[SearchResult], int]:
     """
     Uses FTS5 with bm25 ranking and snippet generation.
     """
@@ -86,11 +93,12 @@ def search_pages(conn: sqlite3.Connection, query: str, limit: int = 10, offset: 
             url=r["url"],
             title=r["title"],
             snippet=r["snippet"] or "",
-            rank=r["find_rank"]
+            rank=r["find_rank"],
         )
         for r in rows
     ]
     return results, int(total)
+
 
 # -------------------------
 # UI templates (inline to keep it small)
@@ -185,12 +193,15 @@ PAGE_HTML = """
 """
 
 # Register inline templates with Flask
-app.jinja_loader = DictLoader({
-    "base.html": BASE_HTML,
-    "home.html": HOME_HTML,
-    "search.html": SEARCH_HTML,
-    "page.html": PAGE_HTML,
-})
+app.jinja_loader = DictLoader(
+    {
+        "base.html": BASE_HTML,
+        "home.html": HOME_HTML,
+        "search.html": SEARCH_HTML,
+        "page.html": PAGE_HTML,
+    }
+)
+
 
 # -------------------------
 # Routes
@@ -201,6 +212,7 @@ def home():
     if not fts5_available(conn):
         return "FTS5 is not available in this Python/SQLite build.", 500
     return render_template("home.html", title="Home")
+
 
 @app.route("/search")
 def search():
@@ -224,10 +236,13 @@ def search():
         max=max,
     )
 
+
 @app.route("/page/<int:page_id>")
 def page(page_id: int):
     conn = get_db()
-    row = conn.execute("SELECT id, url, title, html FROM pages WHERE id = ?;", (page_id,)).fetchone()
+    row = conn.execute(
+        "SELECT id, url, title, html FROM pages WHERE id = ?;", (page_id,)
+    ).fetchone()
     if row is None:
         abort(404)
     back_q = (request.args.get("q") or "").strip()
@@ -237,6 +252,7 @@ def page(page_id: int):
         page=row,
         back_q=back_q,
     )
+
 
 if __name__ == "__main__":
     # Run: python app.py
