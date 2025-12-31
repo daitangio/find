@@ -51,6 +51,7 @@ class SearchResult:
     url: str | None
     title: str | None
     snippet: str
+    rank: str
 
 def search_pages(conn: sqlite3.Connection, query: str, limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
     """
@@ -68,7 +69,8 @@ def search_pages(conn: sqlite3.Connection, query: str, limit: int = 10, offset: 
           p.id,
           p.url,
           p.title,
-          snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12) AS snippet
+          snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12) AS snippet,
+          floor(10* -1*bm25(pages_fts)) as find_rank
         FROM pages_fts
         JOIN pages p ON p.id = pages_fts.rowid
         WHERE pages_fts MATCH ?
@@ -84,6 +86,7 @@ def search_pages(conn: sqlite3.Connection, query: str, limit: int = 10, offset: 
             url=r["url"],
             title=r["title"],
             snippet=r["snippet"] or "",
+            rank=r["find_rank"]
         )
         for r in rows
     ]
@@ -110,6 +113,7 @@ BASE_HTML = """
   </style>
 </head>
 <body>
+  <img src="https://gioorgi.com/logos/vic20-anim.gif">
   <h1><a href="{{ url_for('home') }}">Find</a></h1>
   {% block body %}{% endblock %}
 </body>
@@ -145,7 +149,7 @@ SEARCH_HTML = """
   {% for r in results %}
     <div class="result">
       <div>
-        <a href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong></a>
+        <a title="Score {{r.rank}}" href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong></a>
       </div>
       {% if r.url %}
         <a href="{{ url_for('page', page_id=r.id) }}"><div class="muted">{{ r.title or ("Page #" ~ r.id) }} Cached </div></a>        
@@ -201,9 +205,6 @@ def home():
 @app.route("/search")
 def search():
     conn = get_db()
-    if not fts5_available(conn):
-        return "FTS5 is not available in this Python/SQLite build.", 500
-
     q = (request.args.get("q") or "").strip()
     limit = min(int(request.args.get("limit", 10)), 50)
     offset = max(int(request.args.get("offset", 0)), 0)

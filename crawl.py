@@ -262,9 +262,9 @@ class Crawler:
                         print(f"Written to db {counter} On queue: {current_queue_size} / {self.dbq.maxsize} max_reached_size={max_reached_size}")
                     if(max_reached_size>=self.dbq.maxsize):
                         print(f"WARNING: DB Writer queue near saturation")
-                    elif current_queue_size < 6:
-                        #print(f"Sleeping a bit")
-                        await asyncio.sleep(0.5)
+                    # elif current_queue_size < 6:
+                    #     #print(f"Sleeping a bit")
+                    #     await asyncio.sleep(0.5)
                 finally:
                     self.dbq.task_done()
 
