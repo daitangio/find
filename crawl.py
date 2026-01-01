@@ -30,18 +30,18 @@ def fts5_available(conn: sqlite3.Connection) -> bool:
     except sqlite3.OperationalError:
         return False
 
+
 def ensure_database_present(db_file: str):
     if not os.path.exists(db_file):
         import sqlite3
 
         print(f"Creating {db_file}")
         db = sqlite3.connect(db_file)
-        if fts5_available(db) ==False:
+        if fts5_available(db) == False:
             raise Exception("FT5 Need to be available")
         db.executescript(open("schema.sql", "r", encoding="utf-8").read())
         db.commit()
         db.close()
-
 
 
 def now_iso() -> str:
@@ -257,7 +257,7 @@ class Crawler:
         # Add a dedicated queue for the writer
         # GG: writer is very fast on SQLite
         self.dbq: asyncio.Queue[PageJob | None] = asyncio.Queue(maxsize=concurrency * 4)
-        self.max_reached_size=-1
+        self.max_reached_size = -1
 
     def allowed(self, url: str) -> bool:
         if not url:
@@ -311,7 +311,9 @@ class Crawler:
                     await db.commit()
                     writer_counter = writer_counter + 1
                     current_queue_size = self.dbq.qsize()
-                    self.max_reached_size = max(self.max_reached_size, current_queue_size)
+                    self.max_reached_size = max(
+                        self.max_reached_size, current_queue_size
+                    )
                 finally:
                     self.dbq.task_done()
 
@@ -497,33 +499,35 @@ class Crawler:
     async def logger(self) -> None:
         start_ts = asyncio.get_event_loop().time()
         start_iso = now_iso()
-        sample_time = (self.concurrency * self.delay_s)/2
+        sample_time = (self.concurrency * self.delay_s) / 2
         if sample_time < 2.0:
-            sample_time=2.0
-        expected_page_for_seconds= 1 / self.delay_s
-        print(f"*** CRAWL START {start_iso} Sample time {sample_time}s max_pps={expected_page_for_seconds}")
+            sample_time = 2.0
+        expected_page_for_seconds = 1 / self.delay_s
+        print(
+            f"*** CRAWL START {start_iso} Sample time {sample_time}s max_pps={expected_page_for_seconds}"
+        )
         while True:
             try:
                 url_queue_size = self.q.qsize()
                 writer_current_queue_size = self.dbq.qsize()
-                writer_max_size=self.max_reached_size
+                writer_max_size = self.max_reached_size
                 elapsed_s = asyncio.get_event_loop().time() - start_ts
-                pages_per_s = (
-                    self.fetched_count / elapsed_s if elapsed_s > 0 else 0.0
+                pages_per_s = self.fetched_count / elapsed_s if elapsed_s > 0 else 0.0
+                ratio = 100 * pages_per_s / expected_page_for_seconds
+                print(
+                    f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} pps={pages_per_s:.2f}  {ratio:.2f}% DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}"
                 )
-                ratio=100 *pages_per_s/expected_page_for_seconds
-                print(f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} pps={pages_per_s:.2f}  {ratio:.2f}% DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}")
                 if self.max_reached_size >= self.dbq.maxsize:
                     print(f"WARNING: DB Writer queue near saturation")
                 if ratio < 90:
-                    print(f"WARNING: WE are too slow even respecting the delay. Delay limit is {expected_page_for_seconds} page per seconds")
-                await asyncio.sleep( sample_time )
-            # except asyncio.TimeoutError:                
+                    print(
+                        f"WARNING: WE are too slow even respecting the delay. Delay limit is {expected_page_for_seconds} page per seconds"
+                    )
+                await asyncio.sleep(sample_time)
+            # except asyncio.TimeoutError:
             except Exception as e:
-                print("LOG FAILED:",e)
+                print("LOG FAILED:", e)
                 raise
-                
-
 
     async def run(self) -> None:
         # await self.init_db()

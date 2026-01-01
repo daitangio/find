@@ -36,8 +36,6 @@ def close_db(_exc: Exception | None) -> None:
         conn.close()
 
 
-
-
 # -------------------------
 # Search logic
 # -------------------------
