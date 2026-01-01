@@ -36,14 +36,6 @@ def close_db(_exc: Exception | None) -> None:
         conn.close()
 
 
-def fts5_available(conn: sqlite3.Connection) -> bool:
-    # Quick sanity check: will fail if SQLite not compiled with FTS5
-    try:
-        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS __fts5test USING fts5(x);")
-        conn.execute("DROP TABLE __fts5test;")
-        return True
-    except sqlite3.OperationalError:
-        return False
 
 
 # -------------------------
@@ -225,8 +217,6 @@ app.jinja_loader = DictLoader(
 @app.route("/")
 def home():
     conn = get_db()
-    if not fts5_available(conn):
-        return "FTS5 is not available in this Python/SQLite build.", 500
     return render_template("home.html", title="Home")
 
 

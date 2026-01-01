@@ -21,15 +21,27 @@ DATABASE_FILE = os.path.join(os.getenv("HOME"), ".find.db")
 DEFAULT_UA = "Find/0.1 (+https://github.com/daitangio/find)"
 
 
+def fts5_available(conn: sqlite3.Connection) -> bool:
+    # Quick sanity check: will fail if SQLite not compiled with FTS5
+    try:
+        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS __fts5test USING fts5(x);")
+        conn.execute("DROP TABLE __fts5test;")
+        return True
+    except sqlite3.OperationalError:
+        return False
+
 def ensure_database_present(db_file: str):
     if not os.path.exists(db_file):
         import sqlite3
 
         print(f"Creating {db_file}")
         db = sqlite3.connect(db_file)
+        if fts5_available(db) ==False:
+            raise Exception("FT5 Need to be available")
         db.executescript(open("schema.sql", "r", encoding="utf-8").read())
         db.commit()
         db.close()
+
 
 
 def now_iso() -> str:
@@ -244,7 +256,8 @@ class Crawler:
         self._last_fetch_ts = 0.0
         # Add a dedicated queue for the writer
         # GG: writer is very fast on SQLite
-        self.dbq: asyncio.Queue[PageJob | None] = asyncio.Queue(maxsize=concurrency * 6)
+        self.dbq: asyncio.Queue[PageJob | None] = asyncio.Queue(maxsize=concurrency * 4)
+        self.max_reached_size=-1
 
     def allowed(self, url: str) -> bool:
         if not url:
@@ -269,8 +282,7 @@ class Crawler:
             await db.execute("PRAGMA foreign_keys = ON;")
             await db.execute("PRAGMA journal_mode = WAL;")
             await db.execute("PRAGMA busy_timeout = 1000;")  # wait for locks (ms)
-            counter = 0
-            max_reached_size = -1
+            writer_counter = 0
             while True:
                 job = await self.dbq.get()
                 try:
@@ -297,20 +309,12 @@ class Crawler:
 
                     # Commit per page (safe). You can batch later.
                     await db.commit()
-                    counter = counter + 1
+                    writer_counter = writer_counter + 1
                     current_queue_size = self.dbq.qsize()
-                    max_reached_size = max(max_reached_size, current_queue_size)
-                    if current_queue_size >= (self.dbq.maxsize / 4) or (
-                        counter % 10 == 0
-                    ):
-                        print(
-                            f"Written to db {counter} On queue: {current_queue_size} / {self.dbq.maxsize} max_reached_size={max_reached_size}"
-                        )
-                    if max_reached_size >= self.dbq.maxsize:
-                        print(f"WARNING: DB Writer queue near saturation")
-                    # elif current_queue_size < 6:
-                    #     #print(f"Sleeping a bit")
-                    #     await asyncio.sleep(0.5)
+                    self.max_reached_size = max(self.max_reached_size, current_queue_size)
+                    # if current_queue_size < 6:
+                    #     print(f"Sleeping a bit")
+                    #     await asyncio.sleep(5)
                 finally:
                     self.dbq.task_done()
 
@@ -488,9 +492,27 @@ class Crawler:
                 for u in links:
                     await self.enqueue(u)
                 queue_size = self.q.qsize()
-                ##print(f"[{wid}] fetched {url} links={len(links)} QueueSize: {queue_size}")
+                if queue_size % 10 ==0:
+                    print(f"[{wid}] fetched {url} links={len(links)} QueueSize: {queue_size}")
             finally:
                 self.q.task_done()
+
+    async def logger(self) -> None:
+        while True:
+            try:
+                url_queue_size = self.q.qsize()
+                writer_current_queue_size = self.dbq.qsize()
+                writer_max_size=self.max_reached_size
+                print(f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}")
+                if self.max_reached_size >= self.dbq.maxsize:
+                    print(f"WARNING: DB Writer queue near saturation")
+                await asyncio.sleep(5)
+            # except asyncio.TimeoutError:                
+            except Exception as e:
+                print("LOG FAILED:",e)
+                raise
+                
+
 
     async def run(self) -> None:
         # await self.init_db()
@@ -506,6 +528,7 @@ class Crawler:
             headers=headers, connector=connector
         ) as session:
             writer_task = asyncio.create_task(self.db_writer())
+            logger_task = asyncio.create_task(self.logger())
             tasks = [
                 asyncio.create_task(self.worker(session, i))
                 for i in range(self.concurrency)
@@ -519,6 +542,7 @@ class Crawler:
             # Stop writer
             await self.dbq.put(None)
             await writer_task
+            # logger_task.cancel
 
 
 async def main_async(args: argparse.Namespace) -> None:
