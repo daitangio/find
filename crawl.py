@@ -312,9 +312,6 @@ class Crawler:
                     writer_counter = writer_counter + 1
                     current_queue_size = self.dbq.qsize()
                     self.max_reached_size = max(self.max_reached_size, current_queue_size)
-                    # if current_queue_size < 6:
-                    #     print(f"Sleeping a bit")
-                    #     await asyncio.sleep(5)
                 finally:
                     self.dbq.task_done()
 
@@ -492,21 +489,35 @@ class Crawler:
                 for u in links:
                     await self.enqueue(u)
                 queue_size = self.q.qsize()
-                if queue_size % 10 ==0:
-                    print(f"[{wid}] fetched {url} links={len(links)} QueueSize: {queue_size}")
+                # if queue_size % 10 ==0:
+                #     print(f"[{wid}] fetched {url} links={len(links)} QueueSize: {queue_size}")
             finally:
                 self.q.task_done()
 
     async def logger(self) -> None:
+        start_ts = asyncio.get_event_loop().time()
+        start_iso = now_iso()
+        sample_time = (self.concurrency * self.delay_s)/2
+        if sample_time < 2.0:
+            sample_time=2.0
+        expected_page_for_seconds= 1 / self.delay_s
+        print(f"*** CRAWL START {start_iso} Sample time {sample_time}s max_pps={expected_page_for_seconds}")
         while True:
             try:
                 url_queue_size = self.q.qsize()
                 writer_current_queue_size = self.dbq.qsize()
                 writer_max_size=self.max_reached_size
-                print(f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}")
+                elapsed_s = asyncio.get_event_loop().time() - start_ts
+                pages_per_s = (
+                    self.fetched_count / elapsed_s if elapsed_s > 0 else 0.0
+                )
+                ratio=100 *pages_per_s/expected_page_for_seconds
+                print(f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} pps={pages_per_s:.2f}  {ratio:.2f}% DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}")
                 if self.max_reached_size >= self.dbq.maxsize:
                     print(f"WARNING: DB Writer queue near saturation")
-                await asyncio.sleep(5)
+                if ratio < 90:
+                    print(f"WARNING: WE are too slow even respecting the delay. Delay limit is {expected_page_for_seconds} page per seconds")
+                await asyncio.sleep( sample_time )
             # except asyncio.TimeoutError:                
             except Exception as e:
                 print("LOG FAILED:",e)
@@ -581,7 +592,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--delay",
         type=float,
-        default=0.2,
+        default=0.150,
         help="Politeness delay (seconds) shared across workers",
     )
     p.add_argument("--user-agent", default=DEFAULT_UA)
