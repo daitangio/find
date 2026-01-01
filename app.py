@@ -56,6 +56,7 @@ class SearchResult:
     title: str | None
     snippet: str
     rank: str
+    status_code: int
 
 
 def search_pages(
@@ -77,7 +78,8 @@ def search_pages(
           p.url,
           p.title,
           snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12) AS snippet,
-          floor(10* -1*bm25(pages_fts)) as find_rank
+          floor(10* -1*bm25(pages_fts)) as find_rank,
+          p.status_code
         FROM pages_fts
         JOIN pages p ON p.id = pages_fts.rowid
         WHERE pages_fts MATCH ?
@@ -87,16 +89,26 @@ def search_pages(
         (query, limit, offset),
     ).fetchall()
 
-    results = [
-        SearchResult(
-            id=int(r["id"]),
-            url=r["url"],
-            title=r["title"],
-            snippet=r["snippet"] or "",
-            rank=r["find_rank"],
+    results = []
+    for r in rows:
+        status_code = int(r["status_code"])
+        # For dead links (404) we add the url to the title because the title often is not very useful
+        # it is just a web server error in the most luck cases
+        if status_code == 404:
+            page_title = r["url"] + " / " + r["title"]
+        else:
+            page_title = r["title"]
+
+        results.append(
+            SearchResult(
+                id=int(r["id"]),
+                url=r["url"],
+                title=page_title,
+                snippet=r["snippet"] or "",
+                rank=r["find_rank"],
+                status_code=int(r["status_code"]),
+            )
         )
-        for r in rows
-    ]
     return results, int(total)
 
 
@@ -115,6 +127,7 @@ BASE_HTML = """
     button { padding: .6rem 1rem; }
     .result { margin: 1rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 10px; }
     .muted { color: #666; font-size: .92rem; }
+    .tip   { font-size: .92rem; }
     mark { background: #ffef8a; }
     a { text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -135,7 +148,10 @@ HOME_HTML = """
   <input type="text" name="q" placeholder="Search..." value="{{ q|default('') }}" autofocus>
   <button type="submit">Search</button>
 </form>
-<p class="muted">Tip: use FTS queries like <code>sqlite OR postgres</code>, <code>title:foo</code> (if you store it), phrases like <code>"exact phrase"</code>.</p>
+<p class="tip">Tip: use FTS queries like <code>sqlite OR postgres</code>, <code>title:foo</code> (if you store it), phrases like <code>"exact phrase"</code>.
+<br>
+<a href="/search?q=%22dead+link%22">Search "dead link" to find all the dead link</a>
+</p>
 {% endblock %}
 """
 
@@ -152,7 +168,7 @@ SEARCH_HTML = """
 {% endif %}
 
 {% if total > 0 %}
-  <p class="muted">{{ total }} result(s). Showing {{ results|length }}.</p>
+  <p class="muted">{{ total }} result(s). Showing Page {{ 1+(offset//10) }} of {{ 1+ (total // 10)}}.</p>
 
   {% for r in results %}
     <div class="result">

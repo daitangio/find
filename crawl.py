@@ -256,13 +256,6 @@ class Crawler:
         # GG Skip special pages
         # GG check for exception
         if "/search/?query" in url:
-            # print(f"Skiped Search URL {url}")
-            return False
-        elif "/tag/" in url:
-            return False
-        elif "/categories/" in url:
-            return False
-        elif "/series/" in url:
             return False
         else:
             return True
@@ -350,8 +343,11 @@ class Crawler:
         status_code: int | None,
         fetched_at: str,
     ) -> int:
-        h = content_hash(html)
 
+        if status_code == 404:
+            print(f"Dead link {url}")
+            text = text + " dead link"
+        h = content_hash(html)
         row = await fetchone(
             db, "SELECT id, content_hash FROM pages WHERE url = ?;", (url,)
         )
@@ -492,9 +488,7 @@ class Crawler:
                 for u in links:
                     await self.enqueue(u)
                 queue_size = self.q.qsize()
-                print(
-                    f"[{wid}] fetched {url} links={len(links)} QueueSize: {queue_size}"
-                )
+                ##print(f"[{wid}] fetched {url} links={len(links)} QueueSize: {queue_size}")
             finally:
                 self.q.task_done()
 
