@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    image: find:latest
+    environment:
+      SEARCH_DB: '/opt/find/search.db'
+      TZ: 'Europe/Rome'
+    ports:
+      - "5000:5000"
+    # To manually restart use
+    # docker ps -q -f health=unhealthy | xargs --no-run-if-empty docker restart
+    # Also see https://stackoverflow.com/questions/47088261/restarting-an-unhealthy-docker-container-based-on-healthcheck for companion services
+    healthcheck:
+      # Image has no curl, and we are ok with it
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 1
+      start_period: 5s
+    cpus: 0.90
+    cpu_count: 1
+    volumes:
+      - /opt/find:/opt/find
+    # logging:
+    #   driver: syslog
+    #   options:
+    #     tag: "find"
+    #     syslog-facility: "16"      

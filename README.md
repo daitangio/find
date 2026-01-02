@@ -53,6 +53,7 @@ The overall project aims to be very compact (*less is more* mantra)
     LIMIT 20;
     ```
 2) Dockerfile+compose is needed to provide easy installation
+3) Ability to partial reindex
 3) Ability to classify categories and tags on the full text search can be useful for faceting and classification.
 "Auto discovery" of the taxonomies can be further idea
 
