@@ -140,9 +140,13 @@ HOME_HTML = """
   <input type="text" name="q" placeholder="Search..." value="{{ q|default('') }}" autofocus>
   <button type="submit">Search</button>
 </form>
-<p class="tip">Tip: use FTS queries like <code>sqlite OR postgres</code>, <code>title:foo</code> (if you store it), phrases like <code>"exact phrase"</code>.
+<p class="tip">Tips:</code>
 <br>
-<a href="/search?q=%22dead+link%22">Search "dead link" to find all the dead link</a>
+<ul>
+<li><a href="/search?q=%22dead+link%22">Search "dead link" to find all the dead link</a>
+<li><a href="/search?q=url%3A%228bit.gioorgi.com%22">Search 8bit computers site only</a>
+</ul>
+<p>Use FTS queries like <code>sqlite OR postgres</code>, <code>title:foo</code> (if you store it), phrases like <code>"exact phrase"</p>
 </p>
 {% endblock %}
 """

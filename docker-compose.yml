@@ -6,7 +6,7 @@ services:
       SEARCH_DB: '/opt/find/search.db'
       TZ: 'Europe/Rome'
     ports:
-      - "5000:5000"
+      - "49152:5000"
     # To manually restart use
     # docker ps -q -f health=unhealthy | xargs --no-run-if-empty docker restart
     # Also see https://stackoverflow.com/questions/47088261/restarting-an-unhealthy-docker-container-based-on-healthcheck for companion services

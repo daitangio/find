@@ -1,9 +1,11 @@
 # So What?
 
+<p align="right"><i>Stop searching, start finding stuff</i></p>
+
 Find is a super-minimal search engine based on SQLite Full Text Search capabilities and Python.
 It is composed of two modules:
 
-- [A Super simple web crawler](./crawl.py)
+- [A Simple web crawler](./crawl.py) which use asyncio to maximize search speed
 - [A Flask app to search](./app.py) the content.
 
 # How to start
@@ -57,5 +59,8 @@ The overall project aims to be very compact (*less is more* mantra)
 3) Ability to classify categories and tags on the full text search can be useful for faceting and classification.
 "Auto discovery" of the taxonomies can be further idea
 
+## Docker compose and auto-index mode
 
 Be happy!
+
+
