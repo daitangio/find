@@ -5,17 +5,14 @@ import argparse
 import asyncio
 import hashlib
 import importlib.resources as resources
+import os
 import re
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 from urllib.parse import urljoin, urldefrag, urlparse, urlunparse
 
-import aiohttp
-import aiosqlite
-from bs4 import BeautifulSoup
-
-import os
 
 DATABASE_FILE = os.path.join(os.getenv("HOME"), ".find.db")
 
@@ -34,8 +31,6 @@ def fts5_available(conn: sqlite3.Connection) -> bool:
 
 def ensure_database_present(db_file: str):
     if not os.path.exists(db_file):
-        import sqlite3
-
         print(f"*** [INIT] Creating {db_file}")
         db = sqlite3.connect(db_file)
         if fts5_available(db) == False:
@@ -50,6 +45,10 @@ def ensure_database_present(db_file: str):
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def host_for_url(url: str) -> str:
+    return urlparse(url).netloc.lower()
 
 
 def normalize_url(url: str) -> Optional[str]:
@@ -93,13 +92,49 @@ def normalize_url(url: str) -> Optional[str]:
     return normalized
 
 
+def normalize_seeds(seeds: Iterable[str]) -> list[str]:
+    return [u for u in (normalize_url(s) for s in seeds) if u]
+
+
+def auto_concurrency(delay_s: float) -> int:
+    if delay_s <= 0:
+        return 1
+    return int(1 // delay_s) + 1
+
+
 def same_host(a: str, b: str) -> bool:
-    return urlparse(a).netloc.lower() == urlparse(b).netloc.lower()
+    return host_for_url(a) == host_for_url(b)
+
+
+def should_skip_url(url: str) -> bool:
+    return "/search/?query" in url
+
+
+def is_allowed_url(url: str, root_host: str, restrict_same_host: bool) -> bool:
+    if not url:
+        return False
+    if restrict_same_host and host_for_url(url) != root_host:
+        return False
+    if should_skip_url(url):
+        return False
+    return True
+
+
+def dedupe_in_order(items: Iterable[str]) -> list[str]:
+    seen = set()
+    uniq_items = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            uniq_items.append(item)
+    return uniq_items
 
 
 def html_to_text_and_links(
     base_url: str, html: str
 ) -> tuple[str | None, str, list[str]]:
+    from bs4 import BeautifulSoup
+
     soup = BeautifulSoup(html, "html.parser")
 
     for tag in soup(["script", "style", "noscript"]):
@@ -118,15 +153,7 @@ def html_to_text_and_links(
         if norm:
             links.append(norm)
 
-    # De-dup while preserving order
-    seen = set()
-    uniq_links = []
-    for u in links:
-        if u not in seen:
-            seen.add(u)
-            uniq_links.append(u)
-
-    return title, text, uniq_links
+    return title, text, dedupe_in_order(links)
 
 
 def content_hash(html: str) -> str:
@@ -157,6 +184,8 @@ class FetchResult:
 async def fetch_html(
     session: aiohttp.ClientSession, url: str, timeout_s: int, max_bytes: int
 ) -> FetchResult:
+    import aiohttp
+
     try:
         async with session.get(
             url, timeout=aiohttp.ClientTimeout(total=timeout_s)
@@ -240,15 +269,17 @@ class Crawler:
         user_agent: str,
     ):
         self.db_path = db_path
-        self.seeds = [u for u in (normalize_url(s) for s in seeds) if u]
+        self.seeds = normalize_seeds(seeds)
         if not self.seeds:
             raise ValueError("No valid seed URLs")
 
         self.max_pages = max_pages
         if concurrency == -1:
-            suggested_concurrency= int(1 // delay_s)+1
-            self.concurrency=suggested_concurrency
-            print(f"*** [INIT] Auto tuned concurrency to {suggested_concurrency} for delay {delay_s}")
+            suggested_concurrency = auto_concurrency(delay_s)
+            self.concurrency = suggested_concurrency
+            print(
+                f"*** [INIT] Auto tuned concurrency to {suggested_concurrency} for delay {delay_s}"
+            )
         else:
             self.concurrency = concurrency
         self.timeout_s = timeout_s
@@ -257,7 +288,7 @@ class Crawler:
         self.delay_s = delay_s
         self.user_agent = user_agent
 
-        self.root_host = urlparse(self.seeds[0]).netloc.lower()
+        self.root_host = host_for_url(self.seeds[0])
         self.q: asyncio.Queue[str] = asyncio.Queue()
         self.seen: set[str] = set()
         self.fetched_count = 0
@@ -269,23 +300,14 @@ class Crawler:
         self.max_reached_size = -1
 
     def allowed(self, url: str) -> bool:
-        if not url:
-            return False
-        if self.restrict_same_host:
-            if urlparse(url).netloc.lower() != self.root_host:
-                return False
-        # DEBUG print(f"Checking {url}")
-        # GG Skip special pages
-        # GG check for exception
-        if "/search/?query" in url:
-            return False
-        else:
-            return True
+        return is_allowed_url(url, self.root_host, self.restrict_same_host)
 
     async def db_writer(self) -> None:
         """
         This is the only worker writing to database
         """
+        import aiosqlite
+
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             await db.execute("PRAGMA foreign_keys = ON;")
@@ -541,6 +563,8 @@ class Crawler:
                 raise
 
     async def run(self) -> None:
+        import aiohttp
+
         # await self.init_db()
 
         for s in self.seeds:
