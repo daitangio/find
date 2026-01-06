@@ -241,7 +241,12 @@ class Crawler:
             raise ValueError("No valid seed URLs")
 
         self.max_pages = max_pages
-        self.concurrency = concurrency
+        if concurrency == -1:
+            suggested_concurrency= int(1 // delay_s)+1
+            self.concurrency=suggested_concurrency
+            print(f"*** [INIT] Auto tuned concurrency to {suggested_concurrency} for delay {delay_s}")
+        else:
+            self.concurrency = concurrency
         self.timeout_s = timeout_s
         self.max_bytes = max_bytes
         self.restrict_same_host = restrict_same_host
@@ -256,7 +261,7 @@ class Crawler:
         self._last_fetch_ts = 0.0
         # Add a dedicated queue for the writer
         # GG: writer is very fast on SQLite
-        self.dbq: asyncio.Queue[PageJob | None] = asyncio.Queue(maxsize=concurrency * 4)
+        self.dbq: asyncio.Queue[PageJob | None] = asyncio.Queue(maxsize=self.concurrency * 4)
         self.max_reached_size = -1
 
     def allowed(self, url: str) -> bool:
@@ -506,6 +511,8 @@ class Crawler:
         print(
             f"*** CRAWL START {start_iso} Sample time {sample_time}s max_pps={expected_page_for_seconds}"
         )
+        # Wait a bit to let queue fill-in
+        await asyncio.sleep(sample_time)
         while True:
             try:
                 url_queue_size = self.q.qsize()
@@ -585,7 +592,7 @@ def parse_args() -> argparse.Namespace:
         "--seed", action="append", required=True, help="Seed URL (repeatable)"
     )
     p.add_argument("--max-pages", type=int, default=4000)
-    p.add_argument("--concurrency", type=int, default=10)
+    p.add_argument("--concurrency", type=int, default=-1, help="Normally auto-detected by delay")
     p.add_argument("--timeout", type=int, default=15)
     p.add_argument(
         "--max-bytes", type=int, default=2_000_000, help="Max bytes per page"
