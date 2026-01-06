@@ -264,6 +264,6 @@ def page(page_id: int):
     )
 
 
-if __name__ == "__main__":
+def web_run():
     # Run: python app.py
     app.run(host="127.0.0.1", port=5000, debug=True)

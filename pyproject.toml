@@ -1,0 +1,38 @@
+# Configuration based on tutorial at
+# https://packaging.python.org/en/latest/tutorials/packaging-projects/
+[project]
+name = "find"
+version = "0.0.1-dev"
+description = "find CLI"
+authors = [
+  { name="Giovanni Giorgi", email="jj@gioorgi.com" },
+]
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [    
+    "beautifulsoup4>=4.14.3",
+    "aiohttp==3.13.2",
+    "aiosqlite==0.22.1",
+    "Flask>=3.1.2"
+
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
+[projects.urls]
+Homepage = "https://github.com/daitangio/find"
+Issues = "https://github.com/daitangio/find/issues"
+
+[project.scripts]
+crawl="find.crawl:crawl_init"
+findgui="find.app:web_run"
+
+[build-system]
+# Flit Core is a lightweight tool designed to simplify the process of packaging and distributing Python projects
+# following PEP 517
+requires = ["flit_core<4"]
+build-backend = "flit_core.buildapi"

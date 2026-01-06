@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import importlib.resources as resources
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -35,11 +36,14 @@ def ensure_database_present(db_file: str):
     if not os.path.exists(db_file):
         import sqlite3
 
-        print(f"Creating {db_file}")
+        print(f"*** [INIT] Creating {db_file}")
         db = sqlite3.connect(db_file)
         if fts5_available(db) == False:
             raise Exception("FT5 Need to be available")
-        db.executescript(open("schema.sql", "r", encoding="utf-8").read())
+        schema_sql = (
+            resources.files("find").joinpath("schema.sql").read_text(encoding="utf-8")
+        )
+        db.executescript(schema_sql)
         db.commit()
         db.close()
 
@@ -590,8 +594,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--db", default=DATABASE_FILE)
     p.add_argument(
         "--seed", action="append", required=True, help="Seed URL (repeatable)"
-    )
-    p.add_argument("--max-pages", type=int, default=4000)
+    )    
+    p.add_argument("--max-pages", type=int, default=40)
+    p.add_argument(
+        "--delay",
+        type=float,
+        default=0.150,
+        help="Politeness delay (seconds) shared across workers",
+    )    
     p.add_argument("--concurrency", type=int, default=-1, help="Normally auto-detected by delay")
     p.add_argument("--timeout", type=int, default=15)
     p.add_argument(
@@ -600,17 +610,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--same-host", action="store_true", help="Restrict crawl to the seed host"
     )
-    p.add_argument(
-        "--delay",
-        type=float,
-        default=0.150,
-        help="Politeness delay (seconds) shared across workers",
-    )
+
     p.add_argument("--user-agent", default=DEFAULT_UA)
     return p.parse_args()
 
-
-if __name__ == "__main__":
+def crawl_init():
     args = parse_args()
     ensure_database_present(args.db)
     asyncio.run(main_async(args))
