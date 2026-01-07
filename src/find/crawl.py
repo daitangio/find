@@ -66,11 +66,10 @@ def normalize_url(url: str) -> Optional[str]:
     url, _frag = urldefrag(url)
     url = url.strip()
 
-    p = urlparse(url)
-    # try:
-    #     p = urlparse(url)
-    # except Exception:
-    #     return None
+    try:
+        p = urlparse(url)
+    except Exception:
+        return None
 
     if p.scheme not in ("http", "https"):
         return None
@@ -260,7 +259,6 @@ class Crawler:
         max_bytes: int,
         restrict_same_host: bool,
         delay_s: float,
-        user_agent: str,
     ):
         self.db_path = db_path
         self.seeds = normalize_seeds(seeds)
@@ -280,7 +278,6 @@ class Crawler:
         self.max_bytes = max_bytes
         self.restrict_same_host = restrict_same_host
         self.delay_s = delay_s
-        self.user_agent = user_agent
 
         self.root_host = host_for_url(self.seeds[0])
         self.q: asyncio.Queue[str] = asyncio.Queue()
@@ -559,7 +556,7 @@ class Crawler:
         for s in self.seeds:
             await self.enqueue(s)
 
-        headers = {"User-Agent": self.user_agent}
+        headers = {"User-Agent": DEFAULT_UA}
         connector = aiohttp.TCPConnector(
             limit=self.concurrency, ssl=False
         )  # keep simple
@@ -594,7 +591,6 @@ async def main_async(args: argparse.Namespace) -> None:
         max_bytes=args.max_bytes,
         restrict_same_host=args.same_host,
         delay_s=args.delay,
-        user_agent=args.user_agent,
     )
     await crawler.run()
     print(f"Done. Seen={len(crawler.seen)} fetched={crawler.fetched_count}")
@@ -625,8 +621,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--same-host", action="store_true", help="Restrict crawl to the seed host"
     )
-
-    p.add_argument("--user-agent", default=DEFAULT_UA)
     return p.parse_args()
 
 

@@ -447,6 +447,7 @@ disable=raw-checker-failed,
         # To be fixed:
         missing-class-docstring,
         line-too-long,
+        broad-exception-caught,
         # To be fixed, high pri
         too-many-instance-attributes,
         too-many-positional-arguments,
