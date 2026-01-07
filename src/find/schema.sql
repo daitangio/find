@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS pages (
   text          TEXT NOT NULL,
   content_hash  TEXT NOT NULL,               -- sha256 of html
   status_code   INTEGER,
-  fetched_at    TEXT                         -- ISO timestamp
+  fetched_at    TEXT,                        -- ISO timestamp
+  post_date     TEXT                         -- ISO timestamp
 );
 
 -- All historical versions (only added when content_hash changes)

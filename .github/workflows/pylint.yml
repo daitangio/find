@@ -19,6 +19,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e .
         pip install pylint
-    - name: Analyzing the code with pylint
+    - name: Run tests
+      run: |
+        python -m unittest discover -s tests
+    - name: Analyze the code with pylint
       run: |
         pylint $(git ls-files '*.py')

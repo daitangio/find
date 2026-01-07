@@ -40,7 +40,7 @@ class HtmlExtractionTests(unittest.TestCase):
           </body>
         </html>
         """
-        title, text, links = crawl.html_to_text_and_links(
+        title, text, links, post_date = crawl.html_to_text_and_links(
             "https://example.com/base", html
         )
         self.assertEqual(title, "Example Title")
@@ -49,6 +49,22 @@ class HtmlExtractionTests(unittest.TestCase):
             links,
             ["https://example.com/a", "https://example.com/b"],
         )
+        self.assertIsNone(post_date)
+
+    def test_html_to_text_and_links_extracts_post_date(self) -> None:
+        html = """
+        <html>
+          <body>
+            <div class="post_meta">
+              <span class="post_date">2023-08-30</span>
+            </div>
+          </body>
+        </html>
+        """
+        _title, _text, _links, post_date = crawl.html_to_text_and_links(
+            "https://example.com/base", html
+        )
+        self.assertEqual(post_date, "2023-08-30T00:00:00+00:00")
 
 
 class CrawlPolicyTests(unittest.TestCase):

@@ -126,9 +126,85 @@ def dedupe_in_order(items: Iterable[str]) -> list[str]:
     return uniq_items
 
 
+POST_DATE_FORMATS = (
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%Y.%m.%d",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M:%S%z",
+    "%Y-%m-%dT%H:%M",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S%z",
+    "%b %d, %Y",
+    "%B %d, %Y",
+    "%b %d, %Y %H:%M",
+    "%B %d, %Y %H:%M",
+    "%b %d, %Y %I:%M %p",
+    "%B %d, %Y %I:%M %p",
+)
+
+
+def normalize_post_date(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    cleaned = raw.strip()
+    if not cleaned:
+        return None
+    cleaned = re.sub(
+        r"^(posted on|published on|published|posted)\s*:?",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
+    cleaned = re.sub(r"(\d)(st|nd|rd|th)", r"\1", cleaned, flags=re.IGNORECASE)
+    if not cleaned:
+        return None
+    if cleaned.endswith("Z"):
+        cleaned = cleaned[:-1] + "+00:00"
+
+    tz_hint = None
+    if cleaned.endswith(" UTC"):
+        cleaned = cleaned[:-4].rstrip()
+        tz_hint = timezone.utc
+    elif cleaned.endswith(" GMT"):
+        cleaned = cleaned[:-4].rstrip()
+        tz_hint = timezone.utc
+
+    try:
+        parsed = datetime.fromisoformat(cleaned)
+    except ValueError:
+        parsed = None
+
+    if parsed is None:
+        for fmt in POST_DATE_FORMATS:
+            try:
+                parsed = datetime.strptime(cleaned, fmt)
+                break
+            except ValueError:
+                continue
+
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=tz_hint or timezone.utc)
+    return parsed.isoformat()
+
+
+def extract_post_date(soup: BeautifulSoup) -> str | None:
+    meta = soup.find("div", class_="post_meta")
+    if not meta:
+        return None
+    post_date = meta.find(class_="post_date")
+    if not post_date:
+        return None
+    raw = post_date.get("datetime") or post_date.get_text(" ", strip=True)
+    return normalize_post_date(raw)
+
+
 def html_to_text_and_links(
     base_url: str, html: str
-) -> tuple[str | None, str, list[str]]:
+) -> tuple[str | None, str, list[str], str | None]:
 
     soup = BeautifulSoup(html, "html.parser")
 
@@ -137,6 +213,7 @@ def html_to_text_and_links(
 
     title = soup.title.get_text(" ", strip=True) if soup.title else None
     text = soup.get_text(" ", strip=True)
+    post_date = extract_post_date(soup)
 
     links: list[str] = []
     for a in soup.find_all("a", href=True):
@@ -148,7 +225,7 @@ def html_to_text_and_links(
         if norm:
             links.append(norm)
 
-    return title, text, dedupe_in_order(links)
+    return title, text, dedupe_in_order(links), post_date
 
 
 def content_hash(html: str) -> str:
@@ -165,6 +242,7 @@ class PageJob:
     text: str
     out_links: list[str]
     fetched_at: str
+    post_date: str | None
 
 
 @dataclass
@@ -195,7 +273,7 @@ async def fetch_html(
                     html=None,
                     error="non-html",
                 )
-            
+
             # Read with size cap
             body = (
                 await resp.content.readexactly(
@@ -320,6 +398,7 @@ class Crawler:
                         text=job.text,
                         status_code=job.status_code,
                         fetched_at=job.fetched_at,
+                        post_date=job.post_date,
                     )
                     await self.backfill_inbound_links(db, job.url, page_id)
                     await self.upsert_links(
@@ -367,6 +446,7 @@ class Crawler:
         text: str,
         status_code: int | None,
         fetched_at: str,
+        post_date: str | None,
     ) -> int:
 
         if status_code == 404:
@@ -380,10 +460,10 @@ class Crawler:
             # Insert new page (latest) + version
             cur = await db.execute(
                 """
-                INSERT INTO pages(url, title, html, text, content_hash, status_code, fetched_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO pages(url, title, html, text, content_hash, status_code, fetched_at, post_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                 """,
-                (url, title, html, text, h, status_code, fetched_at),
+                (url, title, html, text, h, status_code, fetched_at, post_date),
             )
             page_id = cur.lastrowid
 
@@ -411,20 +491,20 @@ class Crawler:
             await db.execute(
                 """
                 UPDATE pages
-                SET title=?, html=?, text=?, content_hash=?, status_code=?, fetched_at=?
+                SET title=?, html=?, text=?, content_hash=?, status_code=?, fetched_at=?, post_date=COALESCE(?, post_date)
                 WHERE id=?;
                 """,
-                (title, html, text, h, status_code, fetched_at, page_id),
+                (title, html, text, h, status_code, fetched_at, post_date, page_id),
             )
         else:
             # Dedup: content unchanged; just refresh metadata
             await db.execute(
                 """
                 UPDATE pages
-                SET status_code=?, fetched_at=?
+                SET status_code=?, fetched_at=?, post_date=COALESCE(?, post_date)
                 WHERE id=?;
                 """,
-                (status_code, fetched_at, page_id),
+                (status_code, fetched_at, post_date, page_id),
             )
 
         return page_id
@@ -492,7 +572,7 @@ class Crawler:
                     # print(f"[{wid}] skip {url} ({fr.error})")
                     continue
 
-                title, text, links = html_to_text_and_links(url, fr.html)
+                title, text, links, post_date = html_to_text_and_links(url, fr.html)
                 ts = now_iso()
 
                 # enqueue a DB job (this may backpressure if DB is slower)
@@ -505,6 +585,7 @@ class Crawler:
                         text=text,
                         out_links=links,
                         fetched_at=ts,
+                        post_date=post_date,
                     )
                 )
 

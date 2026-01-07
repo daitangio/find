@@ -5,6 +5,7 @@ import math
 import os
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime
 
 # from typing import Any
 
@@ -41,6 +42,17 @@ def close_db(_exc: Exception | None) -> None:
     if conn is not None:
         conn.close()
 
+# Used in the template
+@app.template_filter("format_post_date")
+def format_post_date(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return ""
+    return parsed.strftime("%b %d, %Y %H:%M")
+
 
 # -------------------------
 # Search logic
@@ -53,6 +65,7 @@ class SearchResult:
     snippet: str
     rank: int
     status_code: int
+    post_date: str | None
 
 
 def search_pages(
@@ -87,7 +100,8 @@ def search_pages(
           p.title,
           snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12) AS snippet,          
           bm25(pages_fts) as score,
-          p.status_code
+          p.status_code,
+          p.post_date
         FROM pages_fts
         JOIN pages p ON p.id = pages_fts.rowid
         LEFT JOIN inbound ON inbound.to_page_id = p.id
@@ -118,6 +132,7 @@ def search_pages(
                 snippet=r["snippet"] or "",
                 rank=int(math.floor(10 * -1 * score)),
                 status_code=int(r["status_code"]),
+                post_date=r["post_date"],
             )
         )
     return results, int(total)
@@ -188,7 +203,11 @@ SEARCH_HTML = """
   {% for r in results %}
     <div class="result">
       <div>
-        [ Score {{r.rank}}] <a title="Score {{r.rank}} Basic." href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong></a>
+        [ Score {{r.rank}}] <a title="Score {{r.rank}} Basic." href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong>
+        {% set formatted_post_date = r.post_date|format_post_date %}
+        {% if formatted_post_date %}
+          <dx class="muted">{{ formatted_post_date }}</dx>
+        {% endif %}</a>
         {% if r.url %}
           <a href="{{ url_for('page', page_id=r.id) }}"><div class="muted">Cached {{ ("Page #" ~ r.id) }}</div></a>        
         {% endif %}

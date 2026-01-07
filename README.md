@@ -39,9 +39,12 @@ Initial prompt was
 
 # Design principles
 
-Find is a compact,zero-conf & tiny solution to add a search engine to a blog site.
+Find is a compact,zero-conf & tiny solution to add a search engine to a pre-existing blog site.
 It just works out of the box.
-As a basic rule I will try to keep it below 2000 lines of code
+
+As a basic rule I will try to keep it below 2000 lines of code.
+
+The project accepts pull requests: please open it adding a comment. Ensure the change passes the pylint checks.
 
 # How
 
