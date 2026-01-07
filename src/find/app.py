@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import math
 import os
 import sqlite3
 from dataclasses import dataclass
-from typing import Any
+
+# from typing import Any
 
 from flask import Flask, g, redirect, render_template, request, url_for, abort
 
 from jinja2 import DictLoader
 
 DB_PATH = os.environ.get("SEARCH_DB", os.path.join(os.environ.get("HOME"), ".find.db"))
+LINK_BOOST_WEIGHT = float(os.environ.get("LINK_BOOST_WEIGHT", "0.05"))
+LINK_BOOST_CAP = int(os.environ.get("LINK_BOOST_CAP", "20"))
 
 app = Flask(__name__)
 
@@ -21,7 +25,7 @@ app = Flask(__name__)
 def get_db() -> sqlite3.Connection:
     if "db" not in g:
         if not os.path.exists(DB_PATH):
-            raise Exception(f"Cannot continue: database {DB_PATH} not found")
+            raise FileNotFoundError(f"Cannot continue: database {DB_PATH} not found")
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         # Slightly nicer defaults
@@ -47,7 +51,8 @@ class SearchResult:
     url: str | None
     title: str | None
     snippet: str
-    rank: str
+    rank: int
+    basic_rank: int
     status_code: int
 
 
@@ -55,7 +60,8 @@ def search_pages(
     conn: sqlite3.Connection, query: str, limit: int = 10, offset: int = 0
 ) -> tuple[list[SearchResult], int]:
     """
-    Uses FTS5 with bm25 ranking and snippet generation.
+    Uses FTS5 with bm25 ranking, inbound-link boost, and snippet generation.
+    GG: New boost score function need to be studied because added value is unclear
     """
     # Count total hits
     total = conn.execute(
@@ -65,20 +71,30 @@ def search_pages(
 
     rows = conn.execute(
         """
+        WITH inbound AS (
+          SELECT to_page_id, COUNT(DISTINCT from_page_id) AS inbound
+          FROM links
+          WHERE to_page_id IS NOT NULL
+          GROUP BY to_page_id
+        )
         SELECT
           p.id,
           p.url,
           p.title,
           snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12) AS snippet,
-          floor(10* -1*bm25(pages_fts)) as find_rank,
+          bm25(pages_fts) * (
+            1.0 + (? * MIN(COALESCE(inbound.inbound, 0), ?))
+          ) AS score,
+          bm25(pages_fts) as basic_score,
           p.status_code
         FROM pages_fts
         JOIN pages p ON p.id = pages_fts.rowid
+        LEFT JOIN inbound ON inbound.to_page_id = p.id
         WHERE pages_fts MATCH ?
-        ORDER BY bm25(pages_fts) ASC
+        ORDER BY score ASC
         LIMIT ? OFFSET ?;
         """,
-        (query, limit, offset),
+        (LINK_BOOST_WEIGHT, LINK_BOOST_CAP, query, limit, offset),
     ).fetchall()
 
     results = []
@@ -91,13 +107,15 @@ def search_pages(
         else:
             page_title = r["title"]
 
+        score = float(r["score"])
         results.append(
             SearchResult(
                 id=int(r["id"]),
                 url=r["url"],
                 title=page_title,
                 snippet=r["snippet"] or "",
-                rank=r["find_rank"],
+                rank=int(math.floor(10 * -1 * score)),
+                basic_rank=int(math.floor(10 * -1 * float(r["basic_score"]))),
                 status_code=int(r["status_code"]),
             )
         )
@@ -169,11 +187,12 @@ SEARCH_HTML = """
   {% for r in results %}
     <div class="result">
       <div>
-        <a title="Score {{r.rank}}" href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong></a>
+        Score {{r.rank}} Basic. Score: {{r.basic_rank}} <a title="Score {{r.rank}} Basic. Score: {{r.basic_rank}}" href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong></a>
+        {% if r.url %}
+          <a href="{{ url_for('page', page_id=r.id) }}"><div class="muted">Cached {{ ("Page #" ~ r.id) }}</div></a>        
+        {% endif %}
       </div>
-      {% if r.url %}
-        <a href="{{ url_for('page', page_id=r.id) }}"><div class="muted">{{ r.title or ("Page #" ~ r.id) }} Cached </div></a>        
-      {% endif %}
+
       <div>{{ r.snippet|safe }}</div>
     </div>
   {% endfor %}
@@ -220,7 +239,6 @@ app.jinja_loader = DictLoader(
 # -------------------------
 @app.route("/")
 def home():
-    conn = get_db()
     return render_template("home.html", title="Home")
 
 
@@ -264,6 +282,6 @@ def page(page_id: int):
     )
 
 
-if __name__ == "__main__":
+def web_run():
     # Run: python app.py
     app.run(host="127.0.0.1", port=5000, debug=True)

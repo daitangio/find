@@ -39,7 +39,12 @@ CREATE TABLE IF NOT EXISTS links (
 
 CREATE INDEX IF NOT EXISTS idx_links_from ON links(from_page_id);
 CREATE INDEX IF NOT EXISTS idx_links_to_url ON links(to_url);
+-- Link boost add-on index
+CREATE INDEX IF NOT EXISTS idx_links_to_page ON links(to_page_id);
+
 CREATE INDEX IF NOT EXISTS idx_versions_page ON page_versions(page_id);
+
+
 
 -- FTS index over latest title/text/url in pages (external content)
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts

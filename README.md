@@ -10,15 +10,21 @@ It is composed of two modules:
 
 # How to start
 
-Create a virtualenv and install the requirements:
+Create a virtualenv and install the project:
 
-    virtualenv venv
-    . venv/bin/activate
-    pip install -r requirements.txt
+```sh
+    python3 -m venv .venv
+    . .venv/bin/activate
+    pip install -e .
+```
 
 Run your first crawl:
 
-    ./crawl.py --seed https://myhost.com --concurrency 6 --same-host
+    crawl --seed https://myhost.com --same-host 
+
+Run the web interface with:
+
+    findgui
 
 
 # Why
