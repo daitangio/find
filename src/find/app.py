@@ -52,7 +52,6 @@ class SearchResult:
     title: str | None
     snippet: str
     rank: int
-    basic_rank: int
     status_code: int
 
 
@@ -62,6 +61,11 @@ def search_pages(
     """
     Uses FTS5 with bm25 ranking, inbound-link boost, and snippet generation.
     GG: New boost score function need to be studied because added value is unclear
+
+    bm25(pages_fts) * (
+            1.0 + (? * MIN(COALESCE(inbound.inbound, 0), ?))
+          ) AS score,
+          + LINK_BOOST_WEIGHT, LINK_BOOST_CAP
     """
     # Count total hits
     total = conn.execute(
@@ -81,11 +85,8 @@ def search_pages(
           p.id,
           p.url,
           p.title,
-          snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12) AS snippet,
-          bm25(pages_fts) * (
-            1.0 + (? * MIN(COALESCE(inbound.inbound, 0), ?))
-          ) AS score,
-          bm25(pages_fts) as basic_score,
+          snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12) AS snippet,          
+          bm25(pages_fts) as score,
           p.status_code
         FROM pages_fts
         JOIN pages p ON p.id = pages_fts.rowid
@@ -94,13 +95,14 @@ def search_pages(
         ORDER BY score ASC
         LIMIT ? OFFSET ?;
         """,
-        (LINK_BOOST_WEIGHT, LINK_BOOST_CAP, query, limit, offset),
+        (query, limit, offset),
     ).fetchall()
 
     results = []
     for r in rows:
         status_code = int(r["status_code"])
-        # For dead links (404) we add the url to the title because the title often is not very useful
+        # For dead links (404) we add the url to the title
+        # because the title often is not very useful
         # it is just a web server error in the most luck cases
         if status_code == 404:
             page_title = r["url"] + " / " + r["title"]
@@ -115,7 +117,6 @@ def search_pages(
                 title=page_title,
                 snippet=r["snippet"] or "",
                 rank=int(math.floor(10 * -1 * score)),
-                basic_rank=int(math.floor(10 * -1 * float(r["basic_score"]))),
                 status_code=int(r["status_code"]),
             )
         )
@@ -187,7 +188,7 @@ SEARCH_HTML = """
   {% for r in results %}
     <div class="result">
       <div>
-        Score {{r.rank}} Basic. Score: {{r.basic_rank}} <a title="Score {{r.rank}} Basic. Score: {{r.basic_rank}}" href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong></a>
+        [ Score {{r.rank}}] <a title="Score {{r.rank}} Basic." href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong></a>
         {% if r.url %}
           <a href="{{ url_for('page', page_id=r.id) }}"><div class="muted">Cached {{ ("Page #" ~ r.id) }}</div></a>        
         {% endif %}

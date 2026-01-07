@@ -346,7 +346,7 @@ indent-after-paren=4
 indent-string='    '
 
 # Maximum number of characters on a single line.
-max-line-length=100
+max-line-length=200
 
 # Maximum number of lines in a module.
 max-module-lines=1000
@@ -436,17 +436,16 @@ disable=raw-checker-failed,
         file-ignored,
         suppressed-message,
         useless-suppression,
-        deprecated-pragma,
-        use-implicit-booleaness-not-comparison-to-string,
-        use-implicit-booleaness-not-comparison-to-zero,
+        #deprecated-pragma,
+        #use-implicit-booleaness-not-comparison-to-string,
+        #use-implicit-booleaness-not-comparison-to-zero,
         use-symbolic-message-instead,
         # GG
         missing-module-docstring,
         missing-function-docstring,        
         multiple-imports,
         # To be fixed:
-        missing-class-docstring,
-        line-too-long,
+        missing-class-docstring,        
         broad-exception-caught,
         # To be fixed, high pri
         too-many-instance-attributes,

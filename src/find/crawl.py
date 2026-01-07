@@ -195,7 +195,7 @@ async def fetch_html(
                     html=None,
                     error="non-html",
                 )
-
+            
             # Read with size cap
             body = (
                 await resp.content.readexactly(
@@ -535,7 +535,8 @@ class Crawler:
                 pages_per_s = self.fetched_count / elapsed_s if elapsed_s > 0 else 0.0
                 ratio = 100 * pages_per_s / expected_page_for_seconds
                 print(
-                    f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} pps={pages_per_s:.2f}  {ratio:.2f}% DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}"
+                    f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} pps={pages_per_s:.2f} "
+                    + f"{ratio:.2f}% DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}"
                 )
                 if self.max_reached_size >= self.dbq.maxsize:
                     print(
