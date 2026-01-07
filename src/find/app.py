@@ -5,7 +5,8 @@ import math
 import os
 import sqlite3
 from dataclasses import dataclass
-from typing import Any
+
+# from typing import Any
 
 from flask import Flask, g, redirect, render_template, request, url_for, abort
 
@@ -24,7 +25,7 @@ app = Flask(__name__)
 def get_db() -> sqlite3.Connection:
     if "db" not in g:
         if not os.path.exists(DB_PATH):
-            raise Exception(f"Cannot continue: database {DB_PATH} not found")
+            raise FileNotFoundError(f"Cannot continue: database {DB_PATH} not found")
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         # Slightly nicer defaults
@@ -238,7 +239,6 @@ app.jinja_loader = DictLoader(
 # -------------------------
 @app.route("/")
 def home():
-    conn = get_db()
     return render_template("home.html", title="Home")
 
 

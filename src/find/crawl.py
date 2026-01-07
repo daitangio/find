@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
-import importlib.resources as resources
+from importlib import resources
 import os
 import re
 import sqlite3
@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from typing import Iterable, Optional
 from urllib.parse import urljoin, urldefrag, urlparse, urlunparse
 
+import aiohttp, aiosqlite
+from bs4 import BeautifulSoup
 
 DATABASE_FILE = os.path.join(os.getenv("HOME"), ".find.db")
 
@@ -33,8 +35,8 @@ def ensure_database_present(db_file: str):
     if not os.path.exists(db_file):
         print(f"*** [INIT] Creating {db_file}")
         db = sqlite3.connect(db_file)
-        if fts5_available(db) == False:
-            raise Exception("FT5 Need to be available")
+        if not fts5_available(db):
+            raise SystemError("FT5 Need to be available")
         schema_sql = (
             resources.files("find").joinpath("schema.sql").read_text(encoding="utf-8")
         )
@@ -64,10 +66,11 @@ def normalize_url(url: str) -> Optional[str]:
     url, _frag = urldefrag(url)
     url = url.strip()
 
-    try:
-        p = urlparse(url)
-    except Exception:
-        return None
+    p = urlparse(url)
+    # try:
+    #     p = urlparse(url)
+    # except Exception:
+    #     return None
 
     if p.scheme not in ("http", "https"):
         return None
@@ -106,16 +109,10 @@ def same_host(a: str, b: str) -> bool:
     return host_for_url(a) == host_for_url(b)
 
 
-def should_skip_url(url: str) -> bool:
-    return "/search/?query" in url
-
-
 def is_allowed_url(url: str, root_host: str, restrict_same_host: bool) -> bool:
     if not url:
         return False
     if restrict_same_host and host_for_url(url) != root_host:
-        return False
-    if should_skip_url(url):
         return False
     return True
 
@@ -133,7 +130,6 @@ def dedupe_in_order(items: Iterable[str]) -> list[str]:
 def html_to_text_and_links(
     base_url: str, html: str
 ) -> tuple[str | None, str, list[str]]:
-    from bs4 import BeautifulSoup
 
     soup = BeautifulSoup(html, "html.parser")
 
@@ -184,8 +180,6 @@ class FetchResult:
 async def fetch_html(
     session: aiohttp.ClientSession, url: str, timeout_s: int, max_bytes: int
 ) -> FetchResult:
-    import aiohttp
-
     try:
         async with session.get(
             url, timeout=aiohttp.ClientTimeout(total=timeout_s)
@@ -296,7 +290,9 @@ class Crawler:
         self._last_fetch_ts = 0.0
         # Add a dedicated queue for the writer
         # GG: writer is very fast on SQLite
-        self.dbq: asyncio.Queue[PageJob | None] = asyncio.Queue(maxsize=self.concurrency * 4)
+        self.dbq: asyncio.Queue[PageJob | None] = asyncio.Queue(
+            maxsize=self.concurrency * 4
+        )
         self.max_reached_size = -1
 
     def allowed(self, url: str) -> bool:
@@ -306,8 +302,6 @@ class Crawler:
         """
         This is the only worker writing to database
         """
-        import aiosqlite
-
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             await db.execute("PRAGMA foreign_keys = ON;")
@@ -480,7 +474,7 @@ class Crawler:
     async def worker(self, session: aiohttp.ClientSession, wid: int) -> None:
         while True:
             if self.fetched_count >= self.max_pages:
-                print("Reached max pages")
+                print(f"[{wid}] Reached max pages")
                 return
 
             try:
@@ -521,18 +515,14 @@ class Crawler:
                 # Enqueue discovered links
                 for u in links:
                     await self.enqueue(u)
-                queue_size = self.q.qsize()
-                # if queue_size % 10 ==0:
-                #     print(f"[{wid}] fetched {url} links={len(links)} QueueSize: {queue_size}")
             finally:
                 self.q.task_done()
 
     async def logger(self) -> None:
         start_ts = asyncio.get_event_loop().time()
         start_iso = now_iso()
-        sample_time = (self.concurrency * self.delay_s) / 2
-        if sample_time < 2.0:
-            sample_time = 2.0
+        # Ensure Sample time is no little than 2 seconds
+        sample_time = max((self.concurrency * self.delay_s) / 2, 2.0)
         expected_page_for_seconds = 1 / self.delay_s
         print(
             f"*** CRAWL START {start_iso} Sample time {sample_time}s max_pps={expected_page_for_seconds}"
@@ -551,7 +541,9 @@ class Crawler:
                     f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} pps={pages_per_s:.2f}  {ratio:.2f}% DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}"
                 )
                 if self.max_reached_size >= self.dbq.maxsize:
-                    print(f"WARNING: DB Writer queue near saturation")
+                    print(
+                        f"WARNING: DB Writer queue near saturation: {self.max_reached_size} / {self.dbq.maxsize}"
+                    )
                 if ratio < 90:
                     print(
                         f"WARNING: WE are too slow even respecting the delay. Delay limit is {expected_page_for_seconds} page per seconds"
@@ -563,10 +555,7 @@ class Crawler:
                 raise
 
     async def run(self) -> None:
-        import aiohttp
-
         # await self.init_db()
-
         for s in self.seeds:
             await self.enqueue(s)
 
@@ -578,7 +567,7 @@ class Crawler:
             headers=headers, connector=connector
         ) as session:
             writer_task = asyncio.create_task(self.db_writer())
-            logger_task = asyncio.create_task(self.logger())
+            _logger_task = asyncio.create_task(self.logger())
             tasks = [
                 asyncio.create_task(self.worker(session, i))
                 for i in range(self.concurrency)
@@ -592,7 +581,7 @@ class Crawler:
             # Stop writer
             await self.dbq.put(None)
             await writer_task
-            # logger_task.cancel
+            # _logger_task.cancel
 
 
 async def main_async(args: argparse.Namespace) -> None:
@@ -618,15 +607,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--db", default=DATABASE_FILE)
     p.add_argument(
         "--seed", action="append", required=True, help="Seed URL (repeatable)"
-    )    
+    )
     p.add_argument("--max-pages", type=int, default=40)
     p.add_argument(
         "--delay",
         type=float,
-        default=0.150,
+        default=0.180,
         help="Politeness delay (seconds) shared across workers",
-    )    
-    p.add_argument("--concurrency", type=int, default=-1, help="Normally auto-detected by delay")
+    )
+    p.add_argument(
+        "--concurrency", type=int, default=-1, help="Normally auto-detected by delay"
+    )
     p.add_argument("--timeout", type=int, default=15)
     p.add_argument(
         "--max-bytes", type=int, default=2_000_000, help="Max bytes per page"
@@ -637,6 +628,7 @@ def parse_args() -> argparse.Namespace:
 
     p.add_argument("--user-agent", default=DEFAULT_UA)
     return p.parse_args()
+
 
 def crawl_init():
     args = parse_args()

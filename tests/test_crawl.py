@@ -2,18 +2,12 @@ import os
 import sys
 import unittest
 
+from find import crawl
+
 ROOT = os.path.dirname(os.path.dirname(__file__))
 SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
-
-from find import crawl
-
-try:
-    import bs4
-    BS4_AVAILABLE = True
-except ImportError:
-    BS4_AVAILABLE = False
 
 
 class NormalizeUrlTests(unittest.TestCase):
@@ -29,7 +23,6 @@ class NormalizeUrlTests(unittest.TestCase):
         self.assertIsNone(crawl.normalize_url("example.com/no-scheme"))
 
 
-@unittest.skipUnless(BS4_AVAILABLE, "bs4 not installed")
 class HtmlExtractionTests(unittest.TestCase):
     def test_html_to_text_and_links_dedupes_and_resolves(self) -> None:
         html = """
@@ -66,14 +59,6 @@ class CrawlPolicyTests(unittest.TestCase):
         )
         self.assertFalse(
             crawl.is_allowed_url("https://other.com/page", root_host, True)
-        )
-
-    def test_is_allowed_url_skips_search_pages(self) -> None:
-        root_host = "example.com"
-        self.assertFalse(
-            crawl.is_allowed_url(
-                "https://example.com/search/?query=dead+link", root_host, False
-            )
         )
 
 
