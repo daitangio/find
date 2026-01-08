@@ -42,6 +42,7 @@ def close_db(_exc: Exception | None) -> None:
     if conn is not None:
         conn.close()
 
+
 # Used in the template
 @app.template_filter("format_post_date")
 def format_post_date(value: str | None) -> str:

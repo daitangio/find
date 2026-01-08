@@ -10,4 +10,5 @@ Install on Install your virtualenv with
 
 # Unit test Run
 
-    python3 -m unittest discover -s tests
+    python3 -m unittest discover -s tests && pylint $(git ls-files '*.py')
+    

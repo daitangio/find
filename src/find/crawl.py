@@ -98,10 +98,17 @@ def normalize_seeds(seeds: Iterable[str]) -> list[str]:
     return [u for u in (normalize_url(s) for s in seeds) if u]
 
 
-def auto_concurrency(delay_s: float) -> int:
+def auto_tune_concurrency(delay_s: float) -> int:
+    """
+    Compute the correct concurrency level.
+    Given the polite delay, we can compute the optimal amount of workers to satisfay the delay.
+    Because we have already a centralized database worker doing part of the processing, we reduce this value from one.
+    We ensure a minimum of 2 workers.
+    Last but noy least, we put also an upper limit (200).
+    """
     if delay_s <= 0:
-        return 1
-    return int(1 // delay_s) + 1
+        return 2
+    return min(max(2, int(1 // delay_s) - 1), 200)
 
 
 def same_host(a: str, b: str) -> bool:
@@ -345,10 +352,9 @@ class Crawler:
 
         self.max_pages = max_pages
         if concurrency == -1:
-            suggested_concurrency = auto_concurrency(delay_s)
-            self.concurrency = suggested_concurrency
+            self.concurrency = auto_tune_concurrency(delay_s)
             print(
-                f"*** [INIT] Auto tuned concurrency to {suggested_concurrency} for delay {delay_s}"
+                f"*** [INIT] Auto tuned concurrency to {self.concurrency} for delay {delay_s}"
             )
         else:
             self.concurrency = concurrency
@@ -569,7 +575,7 @@ class Crawler:
                 )
                 if fr.html is None:
                     # still record “fetched attempt”? (kept simple: skip)
-                    # print(f"[{wid}] skip {url} ({fr.error})")
+                    print(f"[{wid}] skip {url} ({fr.error})")
                     continue
 
                 title, text, links, post_date = html_to_text_and_links(url, fr.html)
@@ -603,8 +609,9 @@ class Crawler:
         sample_time = max((self.concurrency * self.delay_s) / 2, 2.0)
         expected_page_for_seconds = 1 / self.delay_s
         print(
-            f"*** CRAWL START {start_iso} Sample time {sample_time}s max_pps={expected_page_for_seconds}"
+            f"*** CRAWL Sample time {sample_time}s max_pps={expected_page_for_seconds}"
         )
+        print(f"*** CRAWL Pages: {self.max_pages} started at {start_iso}")
         # Wait a bit to let queue fill-in
         await asyncio.sleep(sample_time)
         while True:
@@ -619,11 +626,14 @@ class Crawler:
                     f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} pps={pages_per_s:.2f} "
                     + f"{ratio:.2f}% DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}"
                 )
+                if self.fetched_count >= self.max_pages:
+                    print("*** CRAWL Near completition: stopping logger")
+                    return
                 if self.max_reached_size >= self.dbq.maxsize:
                     print(
                         f"WARNING: DB Writer queue near saturation: {self.max_reached_size} / {self.dbq.maxsize}"
                     )
-                if ratio < 90:
+                if ratio < 80:
                     print(
                         f"WARNING: WE are too slow even respecting the delay. Delay limit is {expected_page_for_seconds} page per seconds"
                     )
