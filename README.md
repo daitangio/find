@@ -3,10 +3,10 @@
 <p align="right"><i>Stop searching, start finding stuff</i></p>
 
 Find is a super-minimal search engine based on SQLite Full Text Search capabilities and Python.
-It is composed of two modules:
+It is composed of two commands:
 
-- [A Simple web crawler](./crawl.py) which use asyncio to maximize search speed
-- [A Flask app to search](./app.py) the content.
+- [A Simple web crawler](./src/find/crawl.py) which use asyncio to maximize search speed
+- [A Flask app to search](./src/find/app.py) the content.
 
 # How to start
 
@@ -59,6 +59,10 @@ To avoid data loss, I opted for a queue 4x the concurrency level.
 The crawler has a default delay to avoid overloading the target site. For this reason, it is pointless to have too much concurrency if your default delay is high.
 
 The overall project aims to be very compact (*less is more* mantra)
+## Utility commands
+
+### reindex
+The reindex command can be used to re-index the database
 
 # Next Step and Roadmap
 

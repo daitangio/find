@@ -24,7 +24,7 @@ def fts5_available(conn: sqlite3.Connection) -> bool:
 
 def ensure_database_present(db_file: str, create_if_missing: bool = True):
     """Ensure database exists and has proper schema
-    
+
     Args:
         db_file: Path to database file
         create_if_missing: If True, create database if it doesn't exist.
@@ -37,13 +37,17 @@ def ensure_database_present(db_file: str, create_if_missing: bool = True):
             if not fts5_available(db):
                 raise SystemError("FTS5 needs to be available")
             schema_sql = (
-                resources.files("find").joinpath("schema.sql").read_text(encoding="utf-8")
+                resources.files("find")
+                .joinpath("schema.sql")
+                .read_text(encoding="utf-8")
             )
             db.executescript(schema_sql)
             db.commit()
             db.close()
         else:
-            print(f"*** [ERROR] Database {db_file} not found. Run crawl first to create it.")
+            print(
+                f"*** [ERROR] Database {db_file} not found. Run crawl first to create it."
+            )
             sys.exit(1)
     else:
         # Quick check that the database has the expected schema
