@@ -80,7 +80,7 @@ class CrawlPolicyTests(unittest.TestCase):
 
 class ConcurrencyTests(unittest.TestCase):
     def test_auto_concurrency_uses_delay(self) -> None:
-        """ Must be rounded down."""
+        """Must be rounded down."""
         self.assertEqual(crawl.auto_tune_concurrency(0.5), 2)
 
     def test_auto_concurrency_handles_zero_delay(self) -> None:
@@ -88,10 +88,9 @@ class ConcurrencyTests(unittest.TestCase):
 
     def test_auto_concurrency_has_a_lower_limit(self) -> None:
         self.assertEqual(crawl.auto_tune_concurrency(5), 2)
-        
+
     def test_auto_concurrency_has_a_upper_limit(self) -> None:
         self.assertEqual(crawl.auto_tune_concurrency(0.00001), 200)
-
 
 
 if __name__ == "__main__":

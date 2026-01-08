@@ -4,10 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
-from importlib import resources
-import os
 import re
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Optional
@@ -16,33 +13,9 @@ from urllib.parse import urljoin, urldefrag, urlparse, urlunparse
 import aiohttp, aiosqlite
 from bs4 import BeautifulSoup
 
-DATABASE_FILE = os.path.join(os.getenv("HOME"), ".find.db")
+from .db_utils import DATABASE_FILE, ensure_database_present
 
 DEFAULT_UA = "Find/0.1 (+https://github.com/daitangio/find)"
-
-
-def fts5_available(conn: sqlite3.Connection) -> bool:
-    # Quick sanity check: will fail if SQLite not compiled with FTS5
-    try:
-        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS __fts5test USING fts5(x);")
-        conn.execute("DROP TABLE __fts5test;")
-        return True
-    except sqlite3.OperationalError:
-        return False
-
-
-def ensure_database_present(db_file: str):
-    if not os.path.exists(db_file):
-        print(f"*** [INIT] Creating {db_file}")
-        db = sqlite3.connect(db_file)
-        if not fts5_available(db):
-            raise SystemError("FT5 Need to be available")
-        schema_sql = (
-            resources.files("find").joinpath("schema.sql").read_text(encoding="utf-8")
-        )
-        db.executescript(schema_sql)
-        db.commit()
-        db.close()
 
 
 def now_iso() -> str:

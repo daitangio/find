@@ -30,6 +30,7 @@ Issues = "https://github.com/daitangio/find/issues"
 [project.scripts]
 crawl="find.crawl:crawl_init"
 findgui="find.app:web_run"
+reindex="find.reindex:main"
 
 [build-system]
 # Flit Core is a lightweight tool designed to simplify the process of packaging and distributing Python projects
