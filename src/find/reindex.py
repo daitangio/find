@@ -6,10 +6,10 @@ Remove all the data from pages_fts and re-populate it from most recent pages, us
 """
 from __future__ import annotations
 
-import argparse
 import asyncio
 
 import aiosqlite
+import click
 
 from .db_utils import DATABASE_FILE, ensure_database_present
 
@@ -40,9 +40,9 @@ async def reindex_fts(db_path: str) -> None:
 
         print(f"✓ Reindexing {total_pages} pages...")
 
-        await db.execute("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")        
+        await db.execute("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')")
         await db.commit()
-        
+
         print("✓ Optimizing index...")
         await db.execute("INSERT INTO pages_fts(pages_fts) VALUES('optimize')")
         await db.commit()
@@ -60,26 +60,9 @@ async def reindex_fts(db_path: str) -> None:
             )
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse command line arguments"""
-    p = argparse.ArgumentParser(
-        description="Reindex the FTS search table from the pages table"
-    )
-    p.add_argument("--db", default=DATABASE_FILE, help="Database file path")
-    return p.parse_args()
-
-
-async def main_async(args: argparse.Namespace) -> None:
-    """Main async function"""
-    await reindex_fts(args.db)
-
-
-def main():
+@click.command(help="Reindex the FTS search table from the pages table")
+@click.option("--db", default=DATABASE_FILE, help="Database file path")
+def main(db: str) -> None:
     """Main entry point"""
-    args = parse_args()
-    ensure_database_present(args.db, create_if_missing=False)
-    asyncio.run(main_async(args))
-
-
-if __name__ == "__main__":
-    main()
+    ensure_database_present(db, create_if_missing=False)
+    asyncio.run(reindex_fts(db))

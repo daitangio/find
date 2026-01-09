@@ -2,7 +2,7 @@
 # https://packaging.python.org/en/latest/tutorials/packaging-projects/
 [project]
 name = "find"
-version = "0.0.1-dev"
+version = "0.0.2-dev"
 description = "find CLI"
 authors = [
   { name="Giovanni Giorgi", email="jj@gioorgi.com" },
@@ -13,7 +13,8 @@ dependencies = [
     "beautifulsoup4>=4.14.3",
     "aiohttp==3.13.3",
     "aiosqlite==0.22.1",
-    "Flask>=3.1.2"
+    "Flask>=3.1.2",
+    "click>=8.3.1"
 
 ]
 classifiers = [

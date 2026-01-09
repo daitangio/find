@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse
 import asyncio
 import hashlib
 import re
@@ -11,6 +10,7 @@ from typing import Iterable, Optional
 from urllib.parse import urljoin, urldefrag, urlparse, urlunparse
 
 import aiohttp, aiosqlite
+import click
 from bs4 import BeautifulSoup
 
 from .db_utils import DATABASE_FILE, ensure_database_present
@@ -82,10 +82,6 @@ def auto_tune_concurrency(delay_s: float) -> int:
     if delay_s <= 0:
         return 2
     return min(max(2, int(1 // delay_s) - 1), 200)
-
-
-def same_host(a: str, b: str) -> bool:
-    return host_for_url(a) == host_for_url(b)
 
 
 def is_allowed_url(url: str, root_host: str, restrict_same_host: bool) -> bool:
@@ -307,10 +303,11 @@ async def fetchone(db: aiosqlite.Connection, sql: str, params=()):
 
 
 class Crawler:
+    # pylint: disable=too-many-arguments
     def __init__(
         self,
         db_path: str,
-        seeds: list[str],
+        seeds: tuple[str, ...],
         max_pages: int,
         concurrency: int,
         timeout_s: int,
@@ -331,6 +328,10 @@ class Crawler:
             )
         else:
             self.concurrency = concurrency
+        if not restrict_same_host:
+            print(
+                "*** [INIT] WARNING: Crawl is not restricted to seed host(s) it can go anywhere!"
+            )
         self.timeout_s = timeout_s
         self.max_bytes = max_bytes
         self.restrict_same_host = restrict_same_host
@@ -368,17 +369,8 @@ class Crawler:
                     if job is None:
                         await db.commit()
                         return
-
-                    page_id = await self.upsert_page_and_version(
-                        db=db,
-                        url=job.url,
-                        title=job.title,
-                        html=job.html,
-                        text=job.text,
-                        status_code=job.status_code,
-                        fetched_at=job.fetched_at,
-                        post_date=job.post_date,
-                    )
+                    #
+                    page_id = await self.upsert_page_and_version(db, job)
                     await self.backfill_inbound_links(db, job.url, page_id)
                     await self.upsert_links(
                         db,
@@ -417,21 +409,14 @@ class Crawler:
             self._last_fetch_ts = asyncio.get_event_loop().time()
 
     async def upsert_page_and_version(
-        self,
-        db: aiosqlite.Connection,
-        url: str,
-        title: str | None,
-        html: str,
-        text: str,
-        status_code: int | None,
-        fetched_at: str,
-        post_date: str | None,
+        self, db: aiosqlite.Connection, page_job: PageJob
     ) -> int:
-
-        if status_code == 404:
+        url = page_job.url
+        text = page_job.text
+        if page_job.status_code == 404:
             print(f"Dead link {url}")
             text = text + " dead link"
-        h = content_hash(html)
+        h = content_hash(page_job.html)
         row = await fetchone(
             db, "SELECT id, content_hash FROM pages WHERE url = ?;", (url,)
         )
@@ -442,7 +427,16 @@ class Crawler:
                 INSERT INTO pages(url, title, html, text, content_hash, status_code, fetched_at, post_date)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                 """,
-                (url, title, html, text, h, status_code, fetched_at, post_date),
+                (
+                    url,
+                    page_job.title,
+                    page_job.html,
+                    text,
+                    h,
+                    page_job.status_code,
+                    page_job.fetched_at,
+                    page_job.post_date,
+                ),
             )
             page_id = cur.lastrowid
 
@@ -451,7 +445,15 @@ class Crawler:
                 INSERT INTO page_versions(page_id, content_hash, title, html, text, status_code, fetched_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """,
-                (page_id, h, title, html, text, status_code, fetched_at),
+                (
+                    page_id,
+                    h,
+                    page_job.title,
+                    page_job.html,
+                    text,
+                    page_job.status_code,
+                    page_job.fetched_at,
+                ),
             )
             return int(page_id)
 
@@ -465,7 +467,15 @@ class Crawler:
                 INSERT OR IGNORE INTO page_versions(page_id, content_hash, title, html, text, status_code, fetched_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """,
-                (page_id, h, title, html, text, status_code, fetched_at),
+                (
+                    page_id,
+                    h,
+                    page_job.title,
+                    page_job.html,
+                    text,
+                    page_job.status_code,
+                    page_job.fetched_at,
+                ),
             )
             await db.execute(
                 """
@@ -473,7 +483,16 @@ class Crawler:
                 SET title=?, html=?, text=?, content_hash=?, status_code=?, fetched_at=?, post_date=COALESCE(?, post_date)
                 WHERE id=?;
                 """,
-                (title, html, text, h, status_code, fetched_at, post_date, page_id),
+                (
+                    page_job.title,
+                    page_job.html,
+                    text,
+                    h,
+                    page_job.status_code,
+                    page_job.fetched_at,
+                    page_job.post_date,
+                    page_id,
+                ),
             )
         else:
             # Dedup: content unchanged; just refresh metadata
@@ -483,7 +502,12 @@ class Crawler:
                 SET status_code=?, fetched_at=?, post_date=COALESCE(?, post_date)
                 WHERE id=?;
                 """,
-                (status_code, fetched_at, post_date, page_id),
+                (
+                    page_job.status_code,
+                    page_job.fetched_at,
+                    page_job.post_date,
+                    page_id,
+                ),
             )
 
         return page_id
@@ -646,50 +670,52 @@ class Crawler:
             # _logger_task.cancel
 
 
-async def main_async(args: argparse.Namespace) -> None:
-    crawler = Crawler(
-        db_path=args.db,
-        seeds=args.seed,
-        max_pages=args.max_pages,
-        concurrency=args.concurrency,
-        timeout_s=args.timeout,
-        max_bytes=args.max_bytes,
-        restrict_same_host=args.same_host,
-        delay_s=args.delay,
-    )
+async def main_async(crawler: Crawler) -> None:
     await crawler.run()
     print(f"Done. Seen={len(crawler.seen)} fetched={crawler.fetched_count}")
 
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        description="Simple asyncio crawler with SQLite versioning + link graph"
+# pylint: disable=too-many-arguments
+@click.command(help="Simple asyncio crawler with SQLite versioning + link graph")
+@click.option("--db", default=DATABASE_FILE, help="Database file path")
+@click.option("--seed", multiple=True, required=True, help="Seed URL (repeatable)")
+@click.option("--max-pages", type=int, default=40, help="Maximum pages to crawl")
+@click.option(
+    "--delay",
+    type=float,
+    default=0.190,
+    help="Politeness delay (seconds) shared across workers",
+)
+@click.option(
+    "--concurrency", type=int, default=-1, help="Normally auto-detected by delay"
+)
+@click.option("--timeout", type=int, default=5, help="Request timeout in seconds")
+@click.option("--max-bytes", type=int, default=2_000_000, help="Max bytes per page")
+@click.option(
+    "--same-host/--no-same-host",
+    is_flag=True,
+    default=True,
+    help="Restrict crawl to the seed host",
+)
+def crawl_init(
+    db: str,
+    seed: tuple[str, ...],
+    max_pages: int,
+    delay: float,
+    concurrency: int,
+    timeout: int,
+    max_bytes: int,
+    same_host: bool,
+) -> None:
+    ensure_database_present(db)
+    crawler = Crawler(
+        db_path=db,
+        seeds=seed,
+        max_pages=max_pages,
+        concurrency=concurrency,
+        timeout_s=timeout,
+        max_bytes=max_bytes,
+        restrict_same_host=same_host,
+        delay_s=delay,
     )
-    p.add_argument("--db", default=DATABASE_FILE)
-    p.add_argument(
-        "--seed", action="append", required=True, help="Seed URL (repeatable)"
-    )
-    p.add_argument("--max-pages", type=int, default=40)
-    p.add_argument(
-        "--delay",
-        type=float,
-        default=0.180,
-        help="Politeness delay (seconds) shared across workers",
-    )
-    p.add_argument(
-        "--concurrency", type=int, default=-1, help="Normally auto-detected by delay"
-    )
-    p.add_argument("--timeout", type=int, default=15)
-    p.add_argument(
-        "--max-bytes", type=int, default=2_000_000, help="Max bytes per page"
-    )
-    p.add_argument(
-        "--same-host", action="store_true", help="Restrict crawl to the seed host"
-    )
-    return p.parse_args()
-
-
-def crawl_init():
-    args = parse_args()
-    ensure_database_present(args.db)
-    asyncio.run(main_async(args))
+    asyncio.run(main_async(crawler))
