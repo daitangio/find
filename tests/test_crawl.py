@@ -71,10 +71,10 @@ class CrawlPolicyTests(unittest.TestCase):
     def test_is_allowed_url_respects_host_restriction(self) -> None:
         root_host = "example.com"
         self.assertTrue(
-            crawl.is_allowed_url("https://example.com/page", root_host, True)
+            crawl.is_allowed_url("https://example.com/page", [root_host], True)
         )
         self.assertFalse(
-            crawl.is_allowed_url("https://other.com/page", root_host, True)
+            crawl.is_allowed_url("https://other.com/page", [root_host], True)
         )
 
 

@@ -22,10 +22,6 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def host_for_url(url: str) -> str:
-    return urlparse(url).netloc.lower()
-
-
 def normalize_url(url: str) -> Optional[str]:
     """
     Basic URL normalization:
@@ -85,11 +81,17 @@ def auto_tune_concurrency(delay_s: float) -> int:
     return min(max(2, int(1 // delay_s) - 1), 200)
 
 
-def is_allowed_url(url: str, root_host: str, restrict_same_host: bool) -> bool:
+def is_allowed_url(
+    url: str, root_host_list: list[str], restrict_same_host: bool
+) -> bool:
     if not url:
         return False
-    if restrict_same_host and host_for_url(url) != root_host:
-        return False
+    if restrict_same_host:
+        current_url = urlparse(url).netloc.lower()
+        if current_url not in root_host_list:
+            # print(current_url, root_host)
+            return False
+        # print("OK", url,current_url)
     return True
 
 
@@ -184,7 +186,7 @@ def extract_post_date(soup: BeautifulSoup) -> str | None:
 
 
 def html_to_text_and_links(
-    base_url: str, html: str, wid: int
+    base_url: str, html: str, wid: int = -1
 ) -> tuple[str | None, str, list[str], str | None]:
 
     soup = BeautifulSoup(html, "html.parser")
@@ -343,7 +345,7 @@ class Crawler:
         self.restrict_same_host = restrict_same_host
         self.delay_s = delay_s
 
-        self.root_host = host_for_url(self.seeds[0])
+        self.root_host_list = self.init_root_host_by_seeds()
         self.q: asyncio.Queue[str] = asyncio.Queue()
         self.seen: set[str] = set()
         self.fetched_count = 0
@@ -357,8 +359,11 @@ class Crawler:
         self.max_reached_size = -1
         self.writer_counter = 0
 
+    def init_root_host_by_seeds(self) -> list[str]:
+        return [urlparse(s).netloc.lower() for s in self.seeds]
+
     def allowed(self, url: str) -> bool:
-        return is_allowed_url(url, self.root_host, self.restrict_same_host)
+        return is_allowed_url(url, self.root_host_list, self.restrict_same_host)
 
     async def db_writer(self) -> None:
         """
@@ -572,7 +577,7 @@ class Crawler:
                     session, url, timeout_s=self.timeout_s, max_bytes=self.max_bytes
                 )
                 if fr.status in (404, 302):
-                    print(f"[{wid}] [WARN] Dead link/proxy {url} ({fr.status})")
+                    # print(f"[{wid}] [WARN] Dead link/proxy {url} ({fr.status})")
                     continue
                 if fr.html is None:
                     if fr.error != "non-html":
@@ -646,7 +651,7 @@ class Crawler:
     async def run(self) -> None:
         # await self.init_db()
         for s in self.seeds:
-            print("Seed URL:", s)
+            print(f"Seed URL: {s}")
             await self.enqueue(s)
 
         headers = {"User-Agent": DEFAULT_UA}
@@ -667,7 +672,7 @@ class Crawler:
 
             # Wait for all pending DB jobs to be written
             await self.dbq.join()
-
+            print("*** All jobs completed, waiting writer")
             # Stop writer
             await self.dbq.put(None)
             await writer_task
