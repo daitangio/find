@@ -60,9 +60,6 @@ def ensure_database_present(db_file: str, create_if_missing: bool = True):
             db.close()
 
 
-
-
-
 def get_version():
     """Get version from pyproject.toml or fallback methods"""
     # First try importlib.metadata if package is installed
