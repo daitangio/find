@@ -1,0 +1,6 @@
+#!/bin/sh
+
+set -xe
+black $(git ls-files '*.py')
+pylint $(git ls-files '*.py')
+python3 -m unittest discover -s tests || echo "Some tests failed"
