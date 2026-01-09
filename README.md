@@ -7,8 +7,12 @@
 Find is a super-minimal search engine based on SQLite Full Text Search capabilities and Python.
 It is composed of two commands:
 
-- [A Simple web crawler](./src/find/crawl.py) which use asyncio to maximize search speed
-- [A Flask app to search](./src/find/app.py) the content.
+- [A Simple web crawler](./src/find/crawl.py) which uses asyncio to maximize index ingestion speed.
+- [A Flask app to enable end-users to find](./src/find/app.py) things.
+
+## Features
+- Find supports caching of web pages (a lost feature of Google) and de-duplication if content is the same for some pages.Back link ranking tuning is in progress
+- Respects robots.txt
 
 # How to start
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+import urllib.robotparser
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Optional
@@ -13,7 +14,12 @@ import aiohttp, aiosqlite
 import click
 from bs4 import BeautifulSoup
 
-from .utils import DATABASE_FILE, ensure_database_present, get_version
+from .utils import (
+    DATABASE_FILE,
+    ensure_database_present,
+    get_version,
+    get_robots_parser,
+)
 
 DEFAULT_UA = f"Find/{get_version()} (+https://github.com/daitangio/find)"
 
@@ -358,6 +364,7 @@ class Crawler:
         )
         self.max_reached_size = -1
         self.writer_counter = 0
+        self.robots_cache: dict[str, urllib.robotparser.RobotFileParser] = {}
 
     def init_root_host_by_seeds(self) -> list[str]:
         return [urlparse(s).netloc.lower() for s in self.seeds]
@@ -570,6 +577,14 @@ class Crawler:
                 return
 
             try:
+
+                rp = await get_robots_parser(
+                    session, url, self.robots_cache, self.timeout_s
+                )
+                if not rp.can_fetch(DEFAULT_UA, url):
+                    print(f"[{wid}] [ROBOTS] Disallowed {url}")
+                    continue
+
                 # polite delay across workers
                 await self._polite_wait()
 
