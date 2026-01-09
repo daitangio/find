@@ -77,6 +77,7 @@ def auto_tune_concurrency(delay_s: float) -> int:
     Given the polite delay, we can compute the optimal amount of workers to satisfay the delay.
     Because we have already a centralized database worker doing part of the processing, we reduce this value from one.
     We ensure a minimum of 2 workers.
+
     Last but noy least, we put also an upper limit (200).
     """
     if delay_s <= 0:
@@ -168,6 +169,10 @@ def normalize_post_date(raw: str | None) -> str | None:
 
 
 def extract_post_date(soup: BeautifulSoup) -> str | None:
+    """
+    XXX: This meta extraction is based on an heuristic you can find in a lot of sites.
+    Your mileage may vary: pull request are accepted to find better solutions
+    """
     meta = soup.find("div", class_="post_meta")
     if not meta:
         return None
@@ -179,7 +184,7 @@ def extract_post_date(soup: BeautifulSoup) -> str | None:
 
 
 def html_to_text_and_links(
-    base_url: str, html: str
+    base_url: str, html: str, wid: int
 ) -> tuple[str | None, str, list[str], str | None]:
 
     soup = BeautifulSoup(html, "html.parser")
@@ -190,7 +195,8 @@ def html_to_text_and_links(
     title = soup.title.get_text(" ", strip=True) if soup.title else None
     text = soup.get_text(" ", strip=True)
     post_date = extract_post_date(soup)
-
+    if not post_date:
+        print(f"[{wid}] [WARN] No post date found {base_url}")
     links: list[str] = []
     for a in soup.find_all("a", href=True):
         href = a.get("href")
@@ -209,16 +215,6 @@ def content_hash(html: str) -> str:
 
 
 ## Writer
-@dataclass
-class PageJob:
-    url: str
-    status_code: int | None
-    html: str
-    title: str | None
-    text: str
-    out_links: list[str]
-    fetched_at: str
-    post_date: str | None
 
 
 @dataclass
@@ -228,6 +224,16 @@ class FetchResult:
     content_type: str | None
     html: str | None
     error: str | None
+
+
+@dataclass
+class PageJob:
+    fetch_result: FetchResult
+    title: str | None
+    text: str
+    out_links: list[str]
+    fetched_at: str
+    post_date: str | None
 
 
 async def fetch_html(
@@ -349,6 +355,7 @@ class Crawler:
             maxsize=self.concurrency * 4
         )
         self.max_reached_size = -1
+        self.writer_counter = 0
 
     def allowed(self, url: str) -> bool:
         return is_allowed_url(url, self.root_host, self.restrict_same_host)
@@ -362,8 +369,9 @@ class Crawler:
             await db.execute("PRAGMA foreign_keys = ON;")
             await db.execute("PRAGMA journal_mode = WAL;")
             await db.execute("PRAGMA busy_timeout = 1000;")  # wait for locks (ms)
-            writer_counter = 0
             while True:
+                current_queue_size = self.dbq.qsize()
+                self.max_reached_size = max(self.max_reached_size, current_queue_size)
                 job = await self.dbq.get()
                 try:
                     if job is None:
@@ -371,7 +379,7 @@ class Crawler:
                         return
                     #
                     page_id = await self.upsert_page_and_version(db, job)
-                    await self.backfill_inbound_links(db, job.url, page_id)
+                    await self.backfill_inbound_links(db, job.fetch_result.url, page_id)
                     await self.upsert_links(
                         db,
                         from_page_id=page_id,
@@ -381,11 +389,7 @@ class Crawler:
 
                     # Commit per page (safe). You can batch later.
                     await db.commit()
-                    writer_counter = writer_counter + 1
-                    current_queue_size = self.dbq.qsize()
-                    self.max_reached_size = max(
-                        self.max_reached_size, current_queue_size
-                    )
+                    self.writer_counter = self.writer_counter + 1
                 finally:
                     self.dbq.task_done()
 
@@ -411,12 +415,9 @@ class Crawler:
     async def upsert_page_and_version(
         self, db: aiosqlite.Connection, page_job: PageJob
     ) -> int:
-        url = page_job.url
+        url = page_job.fetch_result.url
         text = page_job.text
-        if page_job.status_code == 404:
-            print(f"Dead link {url}")
-            text = text + " dead link"
-        h = content_hash(page_job.html)
+        h = content_hash(page_job.fetch_result.html)
         row = await fetchone(
             db, "SELECT id, content_hash FROM pages WHERE url = ?;", (url,)
         )
@@ -430,10 +431,10 @@ class Crawler:
                 (
                     url,
                     page_job.title,
-                    page_job.html,
+                    page_job.fetch_result.html,
                     text,
                     h,
-                    page_job.status_code,
+                    page_job.fetch_result.status,
                     page_job.fetched_at,
                     page_job.post_date,
                 ),
@@ -449,9 +450,9 @@ class Crawler:
                     page_id,
                     h,
                     page_job.title,
-                    page_job.html,
+                    page_job.fetch_result.html,
                     text,
-                    page_job.status_code,
+                    page_job.fetch_result.status,
                     page_job.fetched_at,
                 ),
             )
@@ -471,9 +472,9 @@ class Crawler:
                     page_id,
                     h,
                     page_job.title,
-                    page_job.html,
+                    page_job.fetch_result.html,
                     text,
-                    page_job.status_code,
+                    page_job.fetch_result.status,
                     page_job.fetched_at,
                 ),
             )
@@ -485,10 +486,10 @@ class Crawler:
                 """,
                 (
                     page_job.title,
-                    page_job.html,
+                    page_job.fetch_result.html,
                     text,
                     h,
-                    page_job.status_code,
+                    page_job.fetch_result.status,
                     page_job.fetched_at,
                     page_job.post_date,
                     page_id,
@@ -503,7 +504,7 @@ class Crawler:
                 WHERE id=?;
                 """,
                 (
-                    page_job.status_code,
+                    page_job.fetch_result.status,
                     page_job.fetched_at,
                     page_job.post_date,
                     page_id,
@@ -570,20 +571,22 @@ class Crawler:
                 fr = await fetch_html(
                     session, url, timeout_s=self.timeout_s, max_bytes=self.max_bytes
                 )
-                if fr.html is None:
-                    # still record “fetched attempt”? (kept simple: skip)
-                    print(f"[{wid}] skip {url} ({fr.error})")
+                if fr.status in (404, 302):
+                    print(f"[{wid}] [WARN] Dead link/proxy {url} ({fr.status})")
                     continue
-
-                title, text, links, post_date = html_to_text_and_links(url, fr.html)
+                if fr.html is None:
+                    if fr.error != "non-html":
+                        print(f"[{wid}] [WARN] skip {url} ({fr.status} / {fr.error})")
+                    continue
+                title, text, links, post_date = html_to_text_and_links(
+                    url, fr.html, wid
+                )
                 ts = now_iso()
 
                 # enqueue a DB job (this may backpressure if DB is slower)
                 await self.dbq.put(
                     PageJob(
-                        url=url,
-                        status_code=fr.status,
-                        html=fr.html,
+                        fetch_result=fr,
                         title=title,
                         text=text,
                         out_links=links,
@@ -602,8 +605,8 @@ class Crawler:
     async def logger(self) -> None:
         start_ts = asyncio.get_event_loop().time()
         start_iso = now_iso()
-        # Ensure Sample time is no little than 2 seconds
-        sample_time = max((self.concurrency * self.delay_s) / 2, 2.0)
+        # Ensure Sample time is no little than 3 seconds and no more than 60 seconds
+        sample_time = min(max(((self.concurrency * self.delay_s) / 2), 3.0), 60)
         expected_page_for_seconds = 1 / self.delay_s
         print(
             f"*** CRAWL Sample time {sample_time}s max_pps={expected_page_for_seconds}"
@@ -620,7 +623,7 @@ class Crawler:
                 pages_per_s = self.fetched_count / elapsed_s if elapsed_s > 0 else 0.0
                 ratio = 100 * pages_per_s / expected_page_for_seconds
                 print(
-                    f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} pps={pages_per_s:.2f} "
+                    f"*** STATUS queued={url_queue_size} fetched={self.fetched_count} stored={self.writer_counter} pps={pages_per_s:.2f} "
                     + f"{ratio:.2f}% DB QUEUE: {writer_current_queue_size} / {self.dbq.maxsize} max_reached_size={writer_max_size}"
                 )
                 if self.fetched_count >= self.max_pages:
@@ -628,11 +631,11 @@ class Crawler:
                     return
                 if self.max_reached_size >= self.dbq.maxsize:
                     print(
-                        f"WARNING: DB Writer queue near saturation: {self.max_reached_size} / {self.dbq.maxsize}"
+                        f"*** WARNING: DB Writer queue near saturation: {self.max_reached_size} / {self.dbq.maxsize} Consider tuning writer queue\n"
                     )
                 if ratio < 80:
                     print(
-                        f"WARNING: WE are too slow even respecting the delay. Delay limit is {expected_page_for_seconds} page per seconds"
+                        f"*** WARNING: WE are too slow even respecting the delay. Delay limit is {expected_page_for_seconds} page per seconds, now is {pages_per_s:.2f} \n"
                     )
                 await asyncio.sleep(sample_time)
             # except asyncio.TimeoutError:
@@ -643,6 +646,7 @@ class Crawler:
     async def run(self) -> None:
         # await self.init_db()
         for s in self.seeds:
+            print("Seed URL:", s)
             await self.enqueue(s)
 
         headers = {"User-Agent": DEFAULT_UA}
@@ -679,7 +683,7 @@ async def main_async(crawler: Crawler) -> None:
 @click.command(help="Simple asyncio crawler with SQLite versioning + link graph")
 @click.option("--db", default=DATABASE_FILE, help="Database file path")
 @click.option("--seed", multiple=True, required=True, help="Seed URL (repeatable)")
-@click.option("--max-pages", type=int, default=40, help="Maximum pages to crawl")
+@click.option("--max-pages", type=int, default=4000, help="Maximum pages to crawl")
 @click.option(
     "--delay",
     type=float,
