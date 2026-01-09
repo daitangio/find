@@ -11,7 +11,7 @@ import asyncio
 import aiosqlite
 import click
 
-from .db_utils import DATABASE_FILE, ensure_database_present
+from .utils import DATABASE_FILE, ensure_database_present
 
 
 async def reindex_fts(db_path: str) -> None:

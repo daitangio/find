@@ -2,6 +2,8 @@
 
 <p align="right"><i>Stop searching, start finding stuff</i></p>
 
+[![Pylint](https://github.com/daitangio/find/actions/workflows/pylint.yml/badge.svg)](https://github.com/daitangio/find/actions/workflows/pylint.yml)
+
 Find is a super-minimal search engine based on SQLite Full Text Search capabilities and Python.
 It is composed of two commands:
 

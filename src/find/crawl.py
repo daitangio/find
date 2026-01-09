@@ -13,9 +13,9 @@ import aiohttp, aiosqlite
 import click
 from bs4 import BeautifulSoup
 
-from .db_utils import DATABASE_FILE, ensure_database_present
+from .utils import DATABASE_FILE, ensure_database_present, get_version
 
-DEFAULT_UA = "Find/0.1 (+https://github.com/daitangio/find)"
+DEFAULT_UA = f"Find/{get_version()} (+https://github.com/daitangio/find)"
 
 
 def now_iso() -> str:
@@ -685,7 +685,9 @@ async def main_async(crawler: Crawler) -> None:
 
 
 # pylint: disable=too-many-arguments
-@click.command(help="Simple asyncio crawler with SQLite versioning + link graph")
+@click.command(
+    help=f"Find {get_version()} Simple asyncio crawler with SQLite versioning + link graph"
+)
 @click.option("--db", default=DATABASE_FILE, help="Database file path")
 @click.option("--seed", multiple=True, required=True, help="Seed URL (repeatable)")
 @click.option("--max-pages", type=int, default=4000, help="Maximum pages to crawl")

@@ -8,6 +8,7 @@ import os
 import sqlite3
 import sys
 from importlib import resources
+from importlib.metadata import version
 
 DATABASE_FILE = os.path.join(os.getenv("HOME"), ".find.db")
 
@@ -57,3 +58,12 @@ def ensure_database_present(db_file: str, create_if_missing: bool = True):
                 raise SystemError("FTS5 needs to be available")
         finally:
             db.close()
+
+
+
+
+
+def get_version():
+    """Get version from pyproject.toml or fallback methods"""
+    # First try importlib.metadata if package is installed
+    return version("find")
