@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+import time
 import urllib.robotparser
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -22,6 +23,9 @@ from .utils import (
 )
 
 DEFAULT_UA = f"Find/{get_version()} (+https://github.com/daitangio/find)"
+
+# Basic value tuned
+PERF_THRESHOLD_MS = 2000
 
 
 def now_iso() -> str:
@@ -194,7 +198,7 @@ def extract_post_date(soup: BeautifulSoup) -> str | None:
 def html_to_text_and_links(
     base_url: str, html: str, wid: int = -1
 ) -> tuple[str | None, str, list[str], str | None]:
-
+    start_time = time.perf_counter()
     soup = BeautifulSoup(html, "html.parser")
 
     for tag in soup(["script", "style", "noscript"]):
@@ -204,7 +208,8 @@ def html_to_text_and_links(
     text = soup.get_text(" ", strip=True)
     post_date = extract_post_date(soup)
     if not post_date:
-        print(f"[{wid}] [WARN] No post date found {base_url}")
+        # print(f"[{wid}] [WARN] No post date found {base_url}")
+        pass
     links: list[str] = []
     for a in soup.find_all("a", href=True):
         href = a.get("href")
@@ -215,6 +220,11 @@ def html_to_text_and_links(
         if norm:
             links.append(norm)
 
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    if elapsed_ms > (PERF_THRESHOLD_MS / 30):
+        print(
+            f"[{wid}] [PERF] Parse HTML {base_url}: {elapsed_ms:.1f}ms, {len(links)} links"
+        )
     return title, text, dedupe_in_order(links), post_date
 
 
@@ -247,6 +257,7 @@ class PageJob:
 async def fetch_html(
     session: aiohttp.ClientSession, url: str, timeout_s: int, max_bytes: int
 ) -> FetchResult:
+    start_time = time.perf_counter()
     try:
         async with session.get(
             url, timeout=aiohttp.ClientTimeout(total=timeout_s)
@@ -284,6 +295,9 @@ async def fetch_html(
 
             # Best-effort decode
             html = body.decode(resp.charset or "utf-8", errors="replace")
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            if elapsed_ms > PERF_THRESHOLD_MS:
+                print(f"[PERF] Fetch {url}: {elapsed_ms:.1f}ms")
             return FetchResult(
                 url=url, status=status, content_type=ctype, html=html, error=None
             )
@@ -390,6 +404,7 @@ class Crawler:
                         await db.commit()
                         return
                     #
+                    db_start = time.perf_counter()
                     page_id = await self.upsert_page_and_version(db, job)
                     await self.backfill_inbound_links(db, job.fetch_result.url, page_id)
                     await self.upsert_links(
@@ -401,6 +416,11 @@ class Crawler:
 
                     # Commit per page (safe). You can batch later.
                     await db.commit()
+                    db_elapsed_ms = (time.perf_counter() - db_start) * 1000
+                    if db_elapsed_ms > PERF_THRESHOLD_MS / 100:
+                        print(
+                            f"[PERF] DB write for {job.fetch_result.url}: {db_elapsed_ms:.1f}ms"
+                        )
                     self.writer_counter = self.writer_counter + 1
                 finally:
                     self.dbq.task_done()
@@ -420,9 +440,12 @@ class Crawler:
         async with self._rate_lock:
             now = asyncio.get_event_loop().time()
             wait = (self._last_fetch_ts + self.delay_s) - now
-            if wait > 0:
-                await asyncio.sleep(wait)
-            self._last_fetch_ts = asyncio.get_event_loop().time()
+            self._last_fetch_ts = now + max(wait, 0)
+
+        # Sleep OUTSIDE the lock so other workers can proceed
+        if wait > 0:
+            ## print(f"[DEBUG] Delay:{wait}s")
+            await asyncio.sleep(wait)
 
     async def upsert_page_and_version(
         self, db: aiosqlite.Connection, page_job: PageJob
@@ -571,13 +594,15 @@ class Crawler:
                 return
 
             try:
-                url = await asyncio.wait_for(self.q.get(), timeout=1.0)
+                # This timeout need to be biggfer than 1 seconds because some site
+                # could be very slow to answer
+                url = await asyncio.wait_for(self.q.get(), timeout=5.0)
             except asyncio.TimeoutError:
                 # queue empty-ish
                 return
 
             try:
-
+                worker_start = time.perf_counter()
                 rp = await get_robots_parser(
                     session, url, self.robots_cache, self.timeout_s
                 )
@@ -588,9 +613,11 @@ class Crawler:
                 # polite delay across workers
                 await self._polite_wait()
 
+                fetch_start = time.perf_counter()
                 fr = await fetch_html(
                     session, url, timeout_s=self.timeout_s, max_bytes=self.max_bytes
                 )
+                fetch_elapsed_ms = (time.perf_counter() - fetch_start) * 1000
                 if fr.status in (404, 302):
                     # print(f"[{wid}] [WARN] Dead link/proxy {url} ({fr.status})")
                     continue
@@ -598,9 +625,11 @@ class Crawler:
                     if fr.error != "non-html":
                         print(f"[{wid}] [WARN] skip {url} ({fr.status} / {fr.error})")
                     continue
+                parse_start = time.perf_counter()
                 title, text, links, post_date = html_to_text_and_links(
                     url, fr.html, wid
                 )
+                parse_elapsed_ms = (time.perf_counter() - parse_start) * 1000
                 ts = now_iso()
 
                 # enqueue a DB job (this may backpressure if DB is slower)
@@ -619,6 +648,12 @@ class Crawler:
                 # Enqueue discovered links
                 for u in links:
                     await self.enqueue(u)
+
+                worker_elapsed_ms = (time.perf_counter() - worker_start) * 1000
+                if worker_elapsed_ms > PERF_THRESHOLD_MS:
+                    print(
+                        f"[{wid}] [PERF] {url}: total={worker_elapsed_ms:.1f}ms (fetch={fetch_elapsed_ms:.1f}ms, parse={parse_elapsed_ms:.1f}ms, {len(links)} links)"
+                    )
             finally:
                 self.q.task_done()
 
@@ -721,7 +756,7 @@ async def main_async(crawler: Crawler) -> None:
     "--same-host/--no-same-host",
     is_flag=True,
     default=True,
-    help="Restrict crawl to the seed host",
+    help="Restrict crawl to the seed host (default True)",
 )
 def crawl_init(
     db: str,
