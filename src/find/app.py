@@ -4,20 +4,61 @@ from __future__ import annotations
 import math
 import os
 import sqlite3
+
 from dataclasses import dataclass
 from datetime import datetime
+import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 # from typing import Any
 
 from flask import Flask, g, redirect, render_template, request, url_for, abort
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from jinja2 import DictLoader
 
+
 DB_PATH = os.environ.get("SEARCH_DB", os.path.join(os.environ.get("HOME"), ".find.db"))
+
+
+def extract_meta_refresh(html: str) -> str | None:
+    """Extract the redirect URL from a meta http-equiv refresh tag."""
+    if not html:
+        return None
+    # Match <meta http-equiv="refresh" content="0; URL=..." />
+    pattern = r'<meta[^>]+http-equiv=["\']?refresh["\']?[^>]+content=["\']?\d+;\s*url=([^"\'>\s]+)["\']?[^>]*>'
+    match = re.search(pattern, html, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+
 LINK_BOOST_WEIGHT = float(os.environ.get("LINK_BOOST_WEIGHT", "0.05"))
 LINK_BOOST_CAP = int(os.environ.get("LINK_BOOST_CAP", "20"))
 
 app = Flask(__name__)
+
+# -------------------------
+# Rate Limiting (DDoS protection 1)
+# -------------------------
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "60 per hour"],
+    storage_uri="memory://",
+)
+
+
+# -------------------------
+# Query Complexity Limits (DDoS protection 2)
+# -------------------------
+MAX_QUERY_LENGTH = 200
+MAX_QUERY_TERMS = 10
+SEARCH_TIMEOUT_SECONDS = 5  # Max time for a search query
+
+# Thread pool for timeout-protected search operations
+_search_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="search")
 
 
 # -------------------------
@@ -140,6 +181,86 @@ def search_pages(
 
 
 # -------------------------
+# Routes
+# -------------------------
+@app.route("/")
+def home():
+    return render_template("home.html", title="Home")
+
+
+def _search_pages_threaded(
+    query: str, limit: int, offset: int
+) -> tuple[list["SearchResult"], int]:
+    """Thread-safe wrapper that creates its own DB connection."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        return search_pages(conn, query, limit, offset)
+    finally:
+        conn.close()
+
+
+@app.route("/search")
+@limiter.limit("20 per minute")  # Stricter limit for search endpoint
+def search():
+    q = (request.args.get("q") or "").strip()
+
+    # Enforce query complexity limits
+    if len(q) > MAX_QUERY_LENGTH:
+        abort(400, description="Query too long (max 200 characters)")
+    if len(q.split()) > MAX_QUERY_TERMS:
+        abort(400, description="Too many search terms (max 10)")
+
+    limit = min(int(request.args.get("limit", 10)), 50)
+    offset = max(int(request.args.get("offset", 0)), 0)
+
+    if not q:
+        return redirect(url_for("home"))
+
+    # Execute search with timeout protection (thread-safe)
+    try:
+        future = _search_executor.submit(_search_pages_threaded, q, limit, offset)
+        results, total = future.result(timeout=SEARCH_TIMEOUT_SECONDS)
+        return render_template(
+            "search.html",
+            title=f"Search: {q}",
+            q=q,
+            results=results,
+            total=total,
+            limit=limit,
+            offset=offset,
+            max=max,
+        )
+    except FuturesTimeoutError:
+        abort(504, description="Search timed out. Try a simpler query.")
+
+
+@app.route("/page/<int:page_id>")
+def page(page_id: int):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, url, title, html FROM pages WHERE id = ?;", (page_id,)
+    ).fetchone()
+    if row is None:
+        app.logger.info(f"Page not found {page_id}")
+        abort(404)
+    back_q = (request.args.get("q") or "").strip()
+    # Extract meta refresh redirect URL if present
+    meta_refresh_url = extract_meta_refresh(row["html"]) if row["html"] else None
+    if meta_refresh_url:
+        app.logger.info(
+            f"page_id {page_id} Meta redirect found. Source:{row['html']}: Redirect:{meta_refresh_url}"
+        )
+    return render_template(
+        "page.html",
+        title=row["title"] or f"Page #{page_id}",
+        page=row,
+        back_q=back_q,
+        meta_refresh_url=meta_refresh_url,
+    )
+
+
+# -------------------------
 # UI templates (inline to keep it small)
 # -------------------------
 BASE_HTML = """
@@ -239,8 +360,16 @@ PAGE_HTML = """
   {% if page.url %}
     <div class="muted">{{ page.url }}</div>
   {% endif %}
+  {% if meta_refresh_url %}
+  <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; margin: 1rem 0; border-radius: 5px;">
+    <strong>⚠️ This page contains a redirect to:</strong>
+    <a href="{{ meta_refresh_url }}">{{ meta_refresh_url }}</a>
+  </div>
+  {% else %}
+    <div>{{ page.html|safe }}</div>  
+  {% endif %}
   <hr/>
-  <div>{{ page.html|safe }}</div>
+  
 {% endblock %}
 """
 
@@ -253,54 +382,6 @@ app.jinja_loader = DictLoader(
         "page.html": PAGE_HTML,
     }
 )
-
-
-# -------------------------
-# Routes
-# -------------------------
-@app.route("/")
-def home():
-    return render_template("home.html", title="Home")
-
-
-@app.route("/search")
-def search():
-    conn = get_db()
-    q = (request.args.get("q") or "").strip()
-    limit = min(int(request.args.get("limit", 10)), 50)
-    offset = max(int(request.args.get("offset", 0)), 0)
-
-    if not q:
-        return redirect(url_for("home"))
-
-    results, total = search_pages(conn, q, limit=limit, offset=offset)
-    return render_template(
-        "search.html",
-        title=f"Search: {q}",
-        q=q,
-        results=results,
-        total=total,
-        limit=limit,
-        offset=offset,
-        max=max,
-    )
-
-
-@app.route("/page/<int:page_id>")
-def page(page_id: int):
-    conn = get_db()
-    row = conn.execute(
-        "SELECT id, url, title, html FROM pages WHERE id = ?;", (page_id,)
-    ).fetchone()
-    if row is None:
-        abort(404)
-    back_q = (request.args.get("q") or "").strip()
-    return render_template(
-        "page.html",
-        title=row["title"] or f"Page #{page_id}",
-        page=row,
-        back_q=back_q,
-    )
 
 
 def web_run():

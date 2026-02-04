@@ -657,3 +657,6 @@ init-import=no
 # List of qualified module names which can have objects that can redefine
 # builtins.
 redefining-builtins-modules=six.moves,past.builtins,future.builtins,builtins,io
+
+# W1203: Use lazy % formatting in logging functions
+disable = W1203
