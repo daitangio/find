@@ -22,21 +22,6 @@ from jinja2 import DictLoader
 DB_PATH = os.environ.get("SEARCH_DB", os.path.join(os.environ.get("HOME"), ".find.db"))
 
 
-def extract_meta_refresh(html: str) -> str | None:
-    """Extract the redirect URL from a meta http-equiv refresh tag."""
-    if not html:
-        return None
-    # Match <meta http-equiv="refresh" content="0; URL=..." />
-    pattern = r'<meta[^>]+http-equiv=["\']?refresh["\']?[^>]+content=["\']?\d+;\s*url=([^"\'>\s]+)["\']?[^>]*>'
-    match = re.search(pattern, html, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    return None
-
-
-LINK_BOOST_WEIGHT = float(os.environ.get("LINK_BOOST_WEIGHT", "0.05"))
-LINK_BOOST_CAP = int(os.environ.get("LINK_BOOST_CAP", "20"))
-
 app = Flask(__name__)
 
 # -------------------------
@@ -45,7 +30,7 @@ app = Flask(__name__)
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["200 per day", "60 per hour"],
+    default_limits=["400 per day", "30 per hour"],
     storage_uri="memory://",
 )
 
@@ -55,10 +40,15 @@ limiter = Limiter(
 # -------------------------
 MAX_QUERY_LENGTH = 200
 MAX_QUERY_TERMS = 10
-SEARCH_TIMEOUT_SECONDS = 5  # Max time for a search query
+SEARCH_TIMEOUT_SECONDS = 1  # Max time for a search query
 
 # Thread pool for timeout-protected search operations
 _search_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="search")
+# Unused for the meantime
+# LINK_BOOST_WEIGHT = float(os.environ.get("LINK_BOOST_WEIGHT", "0.05"))
+# LINK_BOOST_CAP = int(os.environ.get("LINK_BOOST_CAP", "20"))
+
+###########################################################
 
 
 # -------------------------
@@ -75,6 +65,18 @@ def get_db() -> sqlite3.Connection:
         conn.execute("PRAGMA journal_mode = WAL;")
         g.db = conn
     return g.db
+
+
+def extract_meta_refresh(html: str) -> str | None:
+    """Extract the redirect URL from a meta http-equiv refresh tag."""
+    if not html:
+        return None
+    # Match <meta http-equiv="refresh" content="0; URL=..." />
+    pattern = r'<meta[^>]+http-equiv=["\']?refresh["\']?[^>]+content=["\']?\d+;\s*url=([^"\'>\s]+)["\']?[^>]*>'
+    match = re.search(pattern, html, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
 
 
 @app.teardown_appcontext

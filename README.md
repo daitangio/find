@@ -65,10 +65,26 @@ To avoid data loss, I opted for a queue 4x the concurrency level.
 The crawler has a default delay to avoid overloading the target site. For this reason, it is pointless to have too much concurrency if your default delay is high.
 
 The overall project aims to be very compact (*less is more* mantra)
+
 ## Utility commands
 
 ### reindex
 The reindex command can be used to re-index the database
+
+# Change Log
+
+# 0.0.2 Rate Limit
+
+This version features:
+- Reindex
+- robots.txt specification implementation
+- flask rate limiter and a minimal DDoS protection: https://flask-limiter.readthedocs.io/en/stable/
+- bugfix on slow sites (>1 second response time)
+ 
+# 0.0.1 First implementation
+
+- Search + index core
+- docker compose
 
 # Next Step and Roadmap
 
@@ -81,9 +97,7 @@ The reindex command can be used to re-index the database
     ORDER BY out_links DESC
     LIMIT 20;
     ```
-2) Dockerfile+compose is needed to provide easy installation
-3) Ability to partial reindex
-3) Ability to classify categories and tags on the full text search can be useful for faceting and classification.
+2) Ability to classify categories and tags on the full text search can be useful for faceting and classification.
 "Auto discovery" of the taxonomies can be further idea
 
 ## Docker compose and auto-index mode
