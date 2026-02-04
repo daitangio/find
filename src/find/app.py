@@ -38,11 +38,11 @@ limiter = Limiter(
 # -------------------------
 # Query Complexity Limits (DDoS protection 2)
 # -------------------------
-MAX_QUERY_LENGTH = 200
-MAX_QUERY_TERMS = 10
-SEARCH_TIMEOUT_SECONDS = 1  # Max time for a search query
+MAX_QUERY_LENGTH = 150
+MAX_QUERY_TERMS = 12
+SEARCH_TIMEOUT_SECONDS = 1.1  # Max time for a search query
 
-# Thread pool for timeout-protected search operations
+# Thread pool for timeout-protected search operations (DDoS protection 3)
 _search_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="search")
 # Unused for the meantime
 # LINK_BOOST_WEIGHT = float(os.environ.get("LINK_BOOST_WEIGHT", "0.05"))
@@ -190,6 +190,14 @@ def home():
     return render_template("home.html", title="Home")
 
 
+def parse_search_query(q: str) -> str:
+    """Transform site:something into url:"something" for FTS5 queries."""
+    # Match site:domain or site:"domain"
+    # Replace with url:"domain"
+    q = re.sub(r'site:(["\']?)([^\s"\']+)\1', r'url:"\2"', q, flags=re.IGNORECASE)
+    return q
+
+
 def _search_pages_threaded(
     query: str, limit: int, offset: int
 ) -> tuple[list["SearchResult"], int]:
@@ -219,9 +227,14 @@ def search():
     if not q:
         return redirect(url_for("home"))
 
+    # Transform site:something queries to url:"something"
+    fts_query = parse_search_query(q)
+
     # Execute search with timeout protection (thread-safe)
     try:
-        future = _search_executor.submit(_search_pages_threaded, q, limit, offset)
+        future = _search_executor.submit(
+            _search_pages_threaded, fts_query, limit, offset
+        )
         results, total = future.result(timeout=SEARCH_TIMEOUT_SECONDS)
         return render_template(
             "search.html",
@@ -301,10 +314,13 @@ HOME_HTML = """
 <p class="tip">Tips:</code>
 <br>
 <ul>
-<li><a href="/search?q=%22dead+link%22">Search "dead link" to find all the dead link</a>
+<li>Use FTS queries like <code>sqlite OR postgres</code>, <code>title:foo</code>, phrases like <code>"exact phrase"</code>
 <li><a href="/search?q=url%3A%228bit.gioorgi.com%22">Search 8bit computers site only</a>
+<li>Google-like <a href="/search?q=site:8bit.gioorgi.com">site:8bit.gioorgi.com syntax</a> is supported.
 </ul>
-<p>Use FTS queries like <code>sqlite OR postgres</code>, <code>title:foo</code> (if you store it), phrases like <code>"exact phrase"</p>
+<p>
+Note: a rate limiter is active by default.
+</p>
 </p>
 {% endblock %}
 """

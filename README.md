@@ -73,12 +73,16 @@ The reindex command can be used to re-index the database
 
 # Change Log
 
+# 0.0.3-TO BE
+
+- Better handling of search queries
+
 # 0.0.2 Rate Limit
 
 This version features:
 - Reindex
 - robots.txt specification implementation
-- flask rate limiter and a minimal DDoS protection: https://flask-limiter.readthedocs.io/en/stable/
+- flask rate limiter and minimal DDoS protection: https://flask-limiter.readthedocs.io/en/stable/
 - bugfix on slow sites (>1 second response time)
  
 # 0.0.1 First implementation
