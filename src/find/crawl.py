@@ -28,6 +28,21 @@ DEFAULT_UA = f"Find/{get_version()} (+https://github.com/daitangio/find)"
 PERF_THRESHOLD_MS = 2000
 
 
+def log_perf_if_slow(
+    tag: str,
+    message: str,
+    start_time: float,
+    threshold_divisor: float = 1.0,
+    suffix: str = "",
+) -> float:
+    """Log performance metrics if elapsed time exceeds threshold. Returns elapsed_ms."""
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    if elapsed_ms > PERF_THRESHOLD_MS / threshold_divisor:
+        prefix = f"[{tag}] " if tag else ""
+        print(f"{prefix}[PERF] {message}: {elapsed_ms:.1f}ms{suffix}")
+    return elapsed_ms
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -220,11 +235,9 @@ def html_to_text_and_links(
         if norm:
             links.append(norm)
 
-    elapsed_ms = (time.perf_counter() - start_time) * 1000
-    if elapsed_ms > (PERF_THRESHOLD_MS / 30):
-        print(
-            f"[{wid}] [PERF] Parse HTML {base_url}: {elapsed_ms:.1f}ms, {len(links)} links"
-        )
+    log_perf_if_slow(
+        str(wid), f"Parse HTML {base_url}", start_time, 30, f", {len(links)} links"
+    )
     return title, text, dedupe_in_order(links), post_date
 
 
@@ -295,9 +308,7 @@ async def fetch_html(
 
             # Best-effort decode
             html = body.decode(resp.charset or "utf-8", errors="replace")
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            if elapsed_ms > PERF_THRESHOLD_MS:
-                print(f"[PERF] Fetch {url}: {elapsed_ms:.1f}ms")
+            log_perf_if_slow("", f"Fetch {url}", start_time)
             return FetchResult(
                 url=url, status=status, content_type=ctype, html=html, error=None
             )
@@ -416,11 +427,9 @@ class Crawler:
 
                     # Commit per page (safe). You can batch later.
                     await db.commit()
-                    db_elapsed_ms = (time.perf_counter() - db_start) * 1000
-                    if db_elapsed_ms > PERF_THRESHOLD_MS / 100:
-                        print(
-                            f"[PERF] DB write for {job.fetch_result.url}: {db_elapsed_ms:.1f}ms"
-                        )
+                    log_perf_if_slow(
+                        "", f"DB write for {job.fetch_result.url}", db_start, 100
+                    )
                     self.writer_counter = self.writer_counter + 1
                 finally:
                     self.dbq.task_done()
@@ -625,12 +634,9 @@ class Crawler:
                     if fr.error != "non-html":
                         print(f"[{wid}] [WARN] skip {url} ({fr.status} / {fr.error})")
                     continue
-                parse_start = time.perf_counter()
                 title, text, links, post_date = html_to_text_and_links(
                     url, fr.html, wid
                 )
-                parse_elapsed_ms = (time.perf_counter() - parse_start) * 1000
-                ts = now_iso()
 
                 # enqueue a DB job (this may backpressure if DB is slower)
                 await self.dbq.put(
@@ -639,7 +645,7 @@ class Crawler:
                         title=title,
                         text=text,
                         out_links=links,
-                        fetched_at=ts,
+                        fetched_at=now_iso(),
                         post_date=post_date,
                     )
                 )
@@ -649,11 +655,13 @@ class Crawler:
                 for u in links:
                     await self.enqueue(u)
 
-                worker_elapsed_ms = (time.perf_counter() - worker_start) * 1000
-                if worker_elapsed_ms > PERF_THRESHOLD_MS:
-                    print(
-                        f"[{wid}] [PERF] {url}: total={worker_elapsed_ms:.1f}ms (fetch={fetch_elapsed_ms:.1f}ms, parse={parse_elapsed_ms:.1f}ms, {len(links)} links)"
-                    )
+                log_perf_if_slow(
+                    str(wid),
+                    url,
+                    worker_start,
+                    1.0,
+                    f" (fetch={fetch_elapsed_ms:.1f}ms, {len(links)} links)",
+                )
             finally:
                 self.q.task_done()
 
