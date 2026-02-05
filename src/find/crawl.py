@@ -255,6 +255,8 @@ class FetchResult:
     content_type: str | None
     html: str | None
     error: str | None
+    last_modified: str | None = None
+    etag: str | None = None
 
 
 @dataclass
@@ -268,15 +270,42 @@ class PageJob:
 
 
 async def fetch_html(
-    session: aiohttp.ClientSession, url: str, timeout_s: int, max_bytes: int
+    session: aiohttp.ClientSession,
+    url: str,
+    timeout_s: int,
+    max_bytes: int,
+    if_modified_since: str | None = None,
+    if_none_match: str | None = None,
 ) -> FetchResult:
     start_time = time.perf_counter()
     try:
+        # Build conditional request headers
+        headers = {}
+        if if_modified_since:
+            headers["If-Modified-Since"] = if_modified_since
+        if if_none_match:
+            headers["If-None-Match"] = if_none_match
+
         async with session.get(
-            url, timeout=aiohttp.ClientTimeout(total=timeout_s)
+            url, timeout=aiohttp.ClientTimeout(total=timeout_s), headers=headers
         ) as resp:
             ctype = resp.headers.get("content-type")
             status = resp.status
+            last_modified = resp.headers.get("Last-Modified")
+            etag = resp.headers.get("ETag")
+
+            # Handle 304 Not Modified - content hasn't changed
+            if status == 304:
+                log_perf_if_slow("", f"Fetch {url} (304 Not Modified)", start_time)
+                return FetchResult(
+                    url=url,
+                    status=status,
+                    content_type=ctype,
+                    html=None,
+                    error=None,
+                    last_modified=last_modified,
+                    etag=etag,
+                )
 
             # Only accept HTML-ish content types; still allow missing ctype
             if ctype and "html" not in ctype.lower():
@@ -286,6 +315,8 @@ async def fetch_html(
                     content_type=ctype,
                     html=None,
                     error="non-html",
+                    last_modified=last_modified,
+                    etag=etag,
                 )
 
             # Read with size cap
@@ -304,13 +335,21 @@ async def fetch_html(
                     content_type=ctype,
                     html=None,
                     error="too-large",
+                    last_modified=last_modified,
+                    etag=etag,
                 )
 
             # Best-effort decode
             html = body.decode(resp.charset or "utf-8", errors="replace")
             log_perf_if_slow("", f"Fetch {url}", start_time)
             return FetchResult(
-                url=url, status=status, content_type=ctype, html=html, error=None
+                url=url,
+                status=status,
+                content_type=ctype,
+                html=html,
+                error=None,
+                last_modified=last_modified,
+                etag=etag,
             )
     except asyncio.TimeoutError:
         return FetchResult(
@@ -434,6 +473,17 @@ class Crawler:
                 finally:
                     self.dbq.task_done()
 
+    async def get_cache_headers(
+        self, db: aiosqlite.Connection, url: str
+    ) -> tuple[str | None, str | None]:
+        """Retrieve Last-Modified and ETag from database for conditional requests."""
+        row = await fetchone(
+            db, "SELECT last_modified, etag FROM pages WHERE url = ?", (url,)
+        )
+        if row:
+            return row["last_modified"], row["etag"]
+        return None, None
+
     async def enqueue(self, url: str) -> None:
         if url in self.seen:
             return
@@ -461,16 +511,35 @@ class Crawler:
     ) -> int:
         url = page_job.fetch_result.url
         text = page_job.text
-        h = content_hash(page_job.fetch_result.html)
+        h = content_hash(page_job.fetch_result.html) if page_job.fetch_result.html else None
         row = await fetchone(
             db, "SELECT id, content_hash FROM pages WHERE url = ?;", (url,)
         )
+        
+        # Handle 304 Not Modified - only update metadata
+        if page_job.fetch_result.status == 304 and row is not None:
+            page_id = int(row["id"])
+            await db.execute(
+                """
+                UPDATE pages
+                SET fetched_at=?, last_modified=COALESCE(?, last_modified), etag=COALESCE(?, etag)
+                WHERE id=?;
+                """,
+                (
+                    page_job.fetched_at,
+                    page_job.fetch_result.last_modified,
+                    page_job.fetch_result.etag,
+                    page_id,
+                ),
+            )
+            return page_id
+        
         if row is None:
             # Insert new page (latest) + version
             cur = await db.execute(
                 """
-                INSERT INTO pages(url, title, html, text, content_hash, status_code, fetched_at, post_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO pages(url, title, html, text, content_hash, status_code, fetched_at, post_date, last_modified, etag)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     url,
@@ -481,6 +550,8 @@ class Crawler:
                     page_job.fetch_result.status,
                     page_job.fetched_at,
                     page_job.post_date,
+                    page_job.fetch_result.last_modified,
+                    page_job.fetch_result.etag,
                 ),
             )
             page_id = cur.lastrowid
@@ -525,7 +596,7 @@ class Crawler:
             await db.execute(
                 """
                 UPDATE pages
-                SET title=?, html=?, text=?, content_hash=?, status_code=?, fetched_at=?, post_date=COALESCE(?, post_date)
+                SET title=?, html=?, text=?, content_hash=?, status_code=?, fetched_at=?, post_date=COALESCE(?, post_date), last_modified=?, etag=?
                 WHERE id=?;
                 """,
                 (
@@ -536,21 +607,25 @@ class Crawler:
                     page_job.fetch_result.status,
                     page_job.fetched_at,
                     page_job.post_date,
+                    page_job.fetch_result.last_modified,
+                    page_job.fetch_result.etag,
                     page_id,
                 ),
             )
         else:
-            # Dedup: content unchanged; just refresh metadata
+            # Dedup: content unchanged; just refresh metadata and cache headers
             await db.execute(
                 """
                 UPDATE pages
-                SET status_code=?, fetched_at=?, post_date=COALESCE(?, post_date)
+                SET status_code=?, fetched_at=?, post_date=COALESCE(?, post_date), last_modified=?, etag=?
                 WHERE id=?;
                 """,
                 (
                     page_job.fetch_result.status,
                     page_job.fetched_at,
                     page_job.post_date,
+                    page_job.fetch_result.last_modified,
+                    page_job.fetch_result.etag,
                     page_id,
                 ),
             )
@@ -622,11 +697,39 @@ class Crawler:
                 # polite delay across workers
                 await self._polite_wait()
 
+                # Check for existing cache headers to make conditional request
+                async with aiosqlite.connect(self.db_path) as db:
+                    db.row_factory = aiosqlite.Row
+                    last_modified, etag = await self.get_cache_headers(db, url)
+
                 fetch_start = time.perf_counter()
                 fr = await fetch_html(
-                    session, url, timeout_s=self.timeout_s, max_bytes=self.max_bytes
+                    session,
+                    url,
+                    timeout_s=self.timeout_s,
+                    max_bytes=self.max_bytes,
+                    if_modified_since=last_modified,
+                    if_none_match=etag,
                 )
                 fetch_elapsed_ms = (time.perf_counter() - fetch_start) * 1000
+
+                # Handle 304 Not Modified - page hasn't changed, skip processing
+                if fr.status == 304:
+                    # Update only metadata (fetched_at) via a minimal PageJob
+                    await self.dbq.put(
+                        PageJob(
+                            fetch_result=fr,
+                            title=None,
+                            text="",
+                            out_links=[],
+                            fetched_at=now_iso(),
+                            post_date=None,
+                        )
+                    )
+                    self.fetched_count += 1
+                    print(f"[{wid}] [304] Not modified: {url}")
+                    continue
+
                 if fr.status in (404, 302):
                     # print(f"[{wid}] [WARN] Dead link/proxy {url} ({fr.status})")
                     continue

@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS pages (
   content_hash  TEXT NOT NULL,               -- sha256 of html
   status_code   INTEGER,
   fetched_at    TEXT,                        -- ISO timestamp
-  post_date     TEXT                         -- ISO timestamp
+  post_date     TEXT,                        -- ISO timestamp
+  last_modified TEXT,                        -- HTTP Last-Modified header for conditional requests
+  etag          TEXT                         -- HTTP ETag header for conditional requests
 );
 
 -- All historical versions (only added when content_hash changes)

@@ -60,8 +60,34 @@ def ensure_database_present(db_file: str, create_if_missing: bool = True):
         try:
             if not fts5_available(db):
                 raise SystemError("FTS5 needs to be available")
+            # Migrate existing databases to add cache header columns
+            _migrate_add_cache_headers(db)
         finally:
             db.close()
+
+
+def _migrate_add_cache_headers(db: sqlite3.Connection):
+    """Add last_modified and etag columns to existing pages table if they don't exist"""
+    cursor = db.cursor()
+    
+    # Check if columns exist
+    cursor.execute("PRAGMA table_info(pages)")
+    columns = [row[1] for row in cursor.fetchall()]
+    
+    needs_migration = False
+    if "last_modified" not in columns:
+        print("*** [MIGRATION] Adding last_modified column to pages table")
+        cursor.execute("ALTER TABLE pages ADD COLUMN last_modified TEXT")
+        needs_migration = True
+    
+    if "etag" not in columns:
+        print("*** [MIGRATION] Adding etag column to pages table")
+        cursor.execute("ALTER TABLE pages ADD COLUMN etag TEXT")
+        needs_migration = True
+    
+    if needs_migration:
+        db.commit()
+        print("*** [MIGRATION] Database schema updated successfully")
 
 
 def get_version():
