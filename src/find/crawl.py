@@ -25,11 +25,11 @@ from .utils import (
 DEFAULT_UA = f"Find/{get_version()} (+https://github.com/daitangio/find)"
 
 # Basic value tuned
-PERF_THRESHOLD_MS = 2000
+PERF_THRESHOLD_MS = float(2000)
 
 
 def log_perf_if_slow(
-    tag: str,
+    tag: int | str,
     message: str,
     start_time: float,
     threshold_divisor: float = 1.0,
@@ -37,9 +37,13 @@ def log_perf_if_slow(
 ) -> float:
     """Log performance metrics if elapsed time exceeds threshold. Returns elapsed_ms."""
     elapsed_ms = (time.perf_counter() - start_time) * 1000
-    if elapsed_ms > PERF_THRESHOLD_MS / threshold_divisor:
+    expected = PERF_THRESHOLD_MS / threshold_divisor
+    if elapsed_ms > expected:
+        delta = elapsed_ms - expected
         prefix = f"[{tag}] " if tag else ""
-        print(f"{prefix}[PERF] {message}: {elapsed_ms:.1f}ms{suffix}")
+        print(
+            f"{prefix}[PERF] {message}: {elapsed_ms:.1f}ms (delta {delta:.0f}) {suffix}"
+        )
     return elapsed_ms
 
 
@@ -236,7 +240,7 @@ def html_to_text_and_links(
             links.append(norm)
 
     log_perf_if_slow(
-        str(wid), f"Parse HTML {base_url}", start_time, 30, f", {len(links)} links"
+        wid, f"Parse HTML {base_url}", start_time, 30, f", {len(links)} links"
     )
     return title, text, dedupe_in_order(links), post_date
 
@@ -268,7 +272,7 @@ class PageJob:
 
 
 async def fetch_html(
-    session: aiohttp.ClientSession, url: str, timeout_s: int, max_bytes: int
+    session: aiohttp.ClientSession, url: str, timeout_s: int, max_bytes: int, wid: int
 ) -> FetchResult:
     start_time = time.perf_counter()
     try:
@@ -308,7 +312,7 @@ async def fetch_html(
 
             # Best-effort decode
             html = body.decode(resp.charset or "utf-8", errors="replace")
-            log_perf_if_slow("", f"Fetch {url}", start_time)
+            log_perf_if_slow(wid, f"Fetch {url}", start_time)
             return FetchResult(
                 url=url, status=status, content_type=ctype, html=html, error=None
             )
@@ -428,7 +432,10 @@ class Crawler:
                     # Commit per page (safe). You can batch later.
                     await db.commit()
                     log_perf_if_slow(
-                        "", f"DB write for {job.fetch_result.url}", db_start, 100
+                        "db_writer",
+                        f"DB write for {job.fetch_result.url}",
+                        db_start,
+                        10,
                     )
                     self.writer_counter = self.writer_counter + 1
                 finally:
@@ -599,11 +606,11 @@ class Crawler:
     async def worker(self, session: aiohttp.ClientSession, wid: int) -> None:
         while True:
             if self.fetched_count >= self.max_pages:
-                print(f"[{wid}] Reached max pages")
+                # print(f"[{wid}] Reached max pages")
                 return
 
             try:
-                # This timeout need to be biggfer than 1 seconds because some site
+                # This timeout need to be bigger than 1 seconds because some site
                 # could be very slow to answer
                 url = await asyncio.wait_for(self.q.get(), timeout=5.0)
             except asyncio.TimeoutError:
@@ -624,7 +631,11 @@ class Crawler:
 
                 fetch_start = time.perf_counter()
                 fr = await fetch_html(
-                    session, url, timeout_s=self.timeout_s, max_bytes=self.max_bytes
+                    session,
+                    url,
+                    timeout_s=self.timeout_s,
+                    max_bytes=self.max_bytes,
+                    wid=wid,
                 )
                 fetch_elapsed_ms = (time.perf_counter() - fetch_start) * 1000
                 if fr.status in (404, 302):
@@ -656,7 +667,7 @@ class Crawler:
                     await self.enqueue(u)
 
                 log_perf_if_slow(
-                    str(wid),
+                    wid,
                     url,
                     worker_start,
                     1.0,
@@ -720,7 +731,7 @@ class Crawler:
             headers=headers, connector=connector
         ) as session:
             writer_task = asyncio.create_task(self.db_writer())
-            _logger_task = asyncio.create_task(self.logger())
+            logger_task = asyncio.create_task(self.logger())
             tasks = [
                 asyncio.create_task(self.worker(session, i))
                 for i in range(self.concurrency)
@@ -734,7 +745,7 @@ class Crawler:
             # Stop writer
             await self.dbq.put(None)
             await writer_task
-            # _logger_task.cancel
+            logger_task.cancel()
 
 
 async def main_async(crawler: Crawler) -> None:
