@@ -1,0 +1,1 @@
+Read these folders in depth, understand how it works deeply, what it does and all its specificities. when that’s done, write a detailed report of your learnings and findings in research.md

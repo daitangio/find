@@ -3,4 +3,5 @@
 set -xe
 black $(git ls-files '*.py')
 python3 -m unittest discover -s tests || echo "Some tests failed"
+# coverage run --source='.' manage.py test vacations || echo "Some tests failed"
 pylint $(git ls-files '*.py')

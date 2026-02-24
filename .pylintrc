@@ -659,4 +659,8 @@ init-import=no
 redefining-builtins-modules=six.moves,past.builtins,future.builtins,builtins,io
 
 # W1203: Use lazy % formatting in logging functions
-disable = W1203
+# R0903: Too few public methods (0/2) (too-few-public-methods)
+# E1101: Class 'LoginToken' has no 'objects' member (no-member)
+# R0914: too-many-locals
+# --disable=C0114,C0115,C0116,R0903
+disable = W1203,R0903,E1101,R0914,C0103,C0411,C0415

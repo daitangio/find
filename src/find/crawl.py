@@ -389,7 +389,7 @@ class Crawler:
         # Add a dedicated queue for the writer
         # GG: writer is very fast on SQLite
         self.dbq: asyncio.Queue[PageJob | None] = asyncio.Queue(
-            maxsize=self.concurrency * 4
+            maxsize=self.concurrency * 5
         )
         self.max_reached_size = -1
         self.writer_counter = 0
@@ -720,7 +720,7 @@ class Crawler:
     async def run(self) -> None:
         # await self.init_db()
         for s in self.seeds:
-            print(f"Seed URL: {s}")
+            print(f"*** Seed URL: {s}")
             await self.enqueue(s)
 
         headers = {"User-Agent": DEFAULT_UA}
@@ -757,9 +757,9 @@ async def main_async(crawler: Crawler) -> None:
 @click.command(
     help=f"Find {get_version()} Simple asyncio crawler with SQLite versioning + link graph"
 )
-@click.option("--db", default=DATABASE_FILE, help="Database file path")
+@click.option("--db", default=DATABASE_FILE, help="Database file path Default:"+DATABASE_FILE)
 @click.option("--seed", multiple=True, required=True, help="Seed URL (repeatable)")
-@click.option("--max-pages", type=int, default=4000, help="Maximum pages to crawl")
+@click.option("--max-pages", type=int, default=4000, help="Maximum pages to crawl (default 4000)")
 @click.option(
     "--delay",
     type=float,
