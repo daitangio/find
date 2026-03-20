@@ -757,9 +757,13 @@ async def main_async(crawler: Crawler) -> None:
 @click.command(
     help=f"Find {get_version()} Simple asyncio crawler with SQLite versioning + link graph"
 )
-@click.option("--db", default=DATABASE_FILE, help="Database file path Default:"+DATABASE_FILE)
+@click.option(
+    "--db", default=DATABASE_FILE, help="Database file path Default:" + DATABASE_FILE
+)
 @click.option("--seed", multiple=True, required=True, help="Seed URL (repeatable)")
-@click.option("--max-pages", type=int, default=4000, help="Maximum pages to crawl (default 4000)")
+@click.option(
+    "--max-pages", type=int, default=4000, help="Maximum pages to crawl (default 4000)"
+)
 @click.option(
     "--delay",
     type=float,
