@@ -113,7 +113,11 @@ class SearchResult:
 
 
 def search_pages(
-    conn: sqlite3.Connection, query: str, limit: int = 10, offset: int = 0
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int = 10,
+    offset: int = 0,
+    order_by: str = "rank",
 ) -> tuple[list[SearchResult], int]:
     """
     Uses FTS5 with bm25 ranking, inbound-link boost, and snippet generation.
@@ -130,8 +134,12 @@ def search_pages(
         (query,),
     ).fetchone()["c"]
 
+    order_clause = "score ASC"
+    if order_by == "date":
+        order_clause = "p.post_date IS NULL ASC, p.post_date DESC, score ASC"
+
     rows = conn.execute(
-        """
+        f"""
         WITH inbound AS (
           SELECT to_page_id, COUNT(DISTINCT from_page_id) AS inbound
           FROM links
@@ -150,7 +158,7 @@ def search_pages(
         JOIN pages p ON p.id = pages_fts.rowid
         LEFT JOIN inbound ON inbound.to_page_id = p.id
         WHERE pages_fts MATCH ?
-        ORDER BY score ASC
+        ORDER BY {order_clause}
         LIMIT ? OFFSET ?;
         """,
         (query, limit, offset),
@@ -199,13 +207,13 @@ def parse_search_query(q: str) -> str:
 
 
 def _search_pages_threaded(
-    query: str, limit: int, offset: int
+    query: str, limit: int, offset: int, order_by: str
 ) -> tuple[list["SearchResult"], int]:
     """Thread-safe wrapper that creates its own DB connection."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
-        return search_pages(conn, query, limit, offset)
+        return search_pages(conn, query, limit, offset, order_by)
     finally:
         conn.close()
 
@@ -223,6 +231,9 @@ def search():
 
     limit = min(int(request.args.get("limit", 10)), 50)
     offset = max(int(request.args.get("offset", 0)), 0)
+    order_by = request.args.get("orderBy", "rank")
+    if order_by not in {"rank", "date"}:
+        order_by = "rank"
 
     if not q:
         return redirect(url_for("home"))
@@ -233,7 +244,7 @@ def search():
     # Execute search with timeout protection (thread-safe)
     try:
         future = _search_executor.submit(
-            _search_pages_threaded, fts_query, limit, offset
+            _search_pages_threaded, fts_query, limit, offset, order_by
         )
         results, total = future.result(timeout=SEARCH_TIMEOUT_SECONDS)
         return render_template(
@@ -244,6 +255,7 @@ def search():
             total=total,
             limit=limit,
             offset=offset,
+            order_by=order_by,
             max=max,
         )
     except FuturesTimeoutError:
@@ -339,6 +351,16 @@ SEARCH_HTML = """
 
 {% if total > 0 %}
   <p class="muted">{{ total }} result(s). Showing Page {{ 1+(offset//10) }} of {{ 1+ (total // 10)}}.</p>
+  <p class="muted">
+    Sort:
+    {% if order_by == "date" %}
+      <a href="{{ url_for('search', q=q, offset=0, limit=limit, orderBy='rank') }}">relevance</a>
+      <strong>date</strong>
+    {% else %}
+      <strong>relevance</strong>
+      <a href="{{ url_for('search', q=q, offset=0, limit=limit, orderBy='date') }}">date</a>
+    {% endif %}
+  </p>
 
   {% for r in results %}
     <div class="result">
@@ -359,11 +381,11 @@ SEARCH_HTML = """
 
   <div style="margin-top: 1rem;">
     {% if offset > 0 %}
-      <a href="{{ url_for('search', q=q, offset=max(offset-limit,0), limit=limit) }}">← Prev</a>
+      <a href="{{ url_for('search', q=q, offset=max(offset-limit,0), limit=limit, orderBy=order_by) }}">← Prev</a>
     {% endif %}
     {% if offset + limit < total %}
       <span style="display:inline-block; width: 1rem;"></span>
-      <a href="{{ url_for('search', q=q, offset=offset+limit, limit=limit) }}">Next →</a>
+      <a href="{{ url_for('search', q=q, offset=offset+limit, limit=limit, orderBy=order_by) }}">Next →</a>
     {% endif %}
   </div>
 {% endif %}
@@ -402,6 +424,7 @@ app.jinja_loader = DictLoader(
 )
 
 
+
 def web_run():
     # Run: python app.py
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=7001, debug=False)

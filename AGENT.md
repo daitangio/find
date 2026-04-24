@@ -1,11 +1,12 @@
-# Find - Detailed Research Report
+## General rules
 
-**Analysis Date:** February 24, 2026  
-**Project Version:** 0.0.2-dev  
-**Author:** Giovanni Giorgi  
-**Repository:** https://github.com/daitangio/find
-
----
+- Think before acting. Read existing files before writing code.
+- Be concise in output but thorough in reasoning.
+- Prefer editing over rewriting whole files.
+- Do not re-read files you have already read.
+- Test your code before declaring done.
+- No sycophantic openers or closing fluff.
+- Keep solutions simple and direct.
 
 ## Executive Summary
 

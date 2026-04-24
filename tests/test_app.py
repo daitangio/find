@@ -1,13 +1,66 @@
 import os
+import sqlite3
 import sys
+import tempfile
 import unittest
-
-from find.app import extract_meta_refresh, parse_search_query
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
+
+import find.app as find_app
+from find.app import extract_meta_refresh, parse_search_query, search_pages
+
+
+def create_search_db(path: str) -> None:
+    schema_path = os.path.join(ROOT, "src", "find", "schema.sql")
+    with sqlite3.connect(path) as conn:
+        with open(schema_path, encoding="utf-8") as schema:
+            conn.executescript(schema.read())
+        conn.executemany(
+            """
+            INSERT INTO pages (
+                id, url, title, html, text, content_hash, status_code, fetched_at, post_date
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            [
+                (
+                    1,
+                    "https://example.com/old",
+                    "Old",
+                    "<p>alpha old</p>",
+                    "alpha old",
+                    "old-hash",
+                    200,
+                    "2024-01-01T00:00:00+00:00",
+                    "2024-01-01T00:00:00+00:00",
+                ),
+                (
+                    2,
+                    "https://example.com/new",
+                    "New",
+                    "<p>alpha new</p>",
+                    "alpha new",
+                    "new-hash",
+                    200,
+                    "2024-02-01T00:00:00+00:00",
+                    "2024-02-01T00:00:00+00:00",
+                ),
+                (
+                    3,
+                    "https://example.com/undated",
+                    "Undated",
+                    "<p>alpha undated</p>",
+                    "alpha undated",
+                    "undated-hash",
+                    200,
+                    "2024-03-01T00:00:00+00:00",
+                    None,
+                ),
+            ],
+        )
 
 
 class ExtractMetaRefreshTests(unittest.TestCase):
@@ -44,6 +97,52 @@ class ParseSearchQueryTests(unittest.TestCase):
     def test_parse_search_query_no_site_term(self) -> None:
         q = "python testing"
         self.assertEqual(parse_search_query(q), "python testing")
+
+
+class SearchPagesTests(unittest.TestCase):
+    def test_search_pages_can_order_by_date(self) -> None:
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            conn = sqlite3.connect(db.name)
+            conn.row_factory = sqlite3.Row
+            try:
+                results, total = search_pages(conn, "alpha", order_by="date")
+            finally:
+                conn.close()
+
+        self.assertEqual(total, 3)
+        self.assertEqual([result.title for result in results], ["New", "Old", "Undated"])
+
+    def test_search_template_links_to_date_sort(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            find_app.DB_PATH = db.name
+            find_app.app.config["TESTING"] = True
+            try:
+                response = find_app.app.test_client().get("/search?q=alpha")
+            finally:
+                find_app.DB_PATH = old_db_path
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"orderBy=date", response.data)
+
+    def test_search_template_preserves_date_sort_in_pagination(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            find_app.DB_PATH = db.name
+            find_app.app.config["TESTING"] = True
+            try:
+                response = find_app.app.test_client().get(
+                    "/search?q=alpha&limit=1&orderBy=date"
+                )
+            finally:
+                find_app.DB_PATH = old_db_path
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"orderBy=date", response.data)
+        self.assertIn(b"offset=1", response.data)
 
 
 if __name__ == "__main__":
