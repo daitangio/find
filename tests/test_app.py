@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 SRC = os.path.join(ROOT, "src")
@@ -177,6 +178,16 @@ class SearchPagesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"orderBy=date", response.data)
         self.assertIn(b"offset=1", response.data)
+
+
+class AppTemplateTests(unittest.TestCase):
+    def test_base_template_includes_find_version(self) -> None:
+        find_app.app.config["TESTING"] = True
+        with patch.object(find_app.utils, "get_version", return_value="1.2.3-test"):
+            response = find_app.app.test_client().get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Find 1.2.3-test", response.data)
 
 
 if __name__ == "__main__":

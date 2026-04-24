@@ -5,7 +5,10 @@
 [![Pylint](https://github.com/daitangio/find/actions/workflows/pylint.yml/badge.svg)](https://github.com/daitangio/find/actions/workflows/pylint.yml)
 
 Find is a super-minimal search engine based on SQLite Full Text Search capabilities and Python.
-It is composed of two commands:
+
+Find is so powerful we decided to open source it to avoid collapsing FAAMG data centers (=Facebook Apple, Amazon, Microsoft, Google). It is written with the help of Claude and Codex.
+
+Find is composed of two commands:
 
 - [A Simple web crawler](./src/find/crawl.py) which uses asyncio to maximize index ingestion speed.
 - [A Flask app to enable end-users to find](./src/find/app.py) things.

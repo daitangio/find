@@ -18,11 +18,18 @@ from flask_limiter.util import get_remote_address
 
 from jinja2 import DictLoader
 
+from find import utils
+
 
 DB_PATH = os.environ.get("SEARCH_DB", os.path.join(os.environ.get("HOME"), ".find.db"))
 
 
 app = Flask(__name__)
+
+
+@app.context_processor
+def inject_find_version() -> dict[str, str]:
+    return {"find_version": utils.get_version()}
 
 # -------------------------
 # Rate Limiting (DDoS protection 1)
@@ -312,29 +319,30 @@ def search():
         abort(504, description="Search timed out. Try a simpler query.")
 
 
-@app.route("/page/<int:page_id>")
-def page(page_id: int):
-    conn = get_db()
-    row = conn.execute(
-        "SELECT id, url, title, html FROM pages WHERE id = ?;", (page_id,)
-    ).fetchone()
-    if row is None:
-        app.logger.info(f"Page not found {page_id}")
-        abort(404)
-    back_q = (request.args.get("q") or "").strip()
-    # Extract meta refresh redirect URL if present
-    meta_refresh_url = extract_meta_refresh(row["html"]) if row["html"] else None
-    if meta_refresh_url:
-        app.logger.info(
-            f"page_id {page_id} Meta redirect found. Source:{row['html']}: Redirect:{meta_refresh_url}"
-        )
-    return render_template(
-        "page.html",
-        title=row["title"] or f"Page #{page_id}",
-        page=row,
-        back_q=back_q,
-        meta_refresh_url=meta_refresh_url,
-    )
+# Disabled page cache
+# @app.route("/page/<int:page_id>")
+# def page(page_id: int):
+#     conn = get_db()
+#     row = conn.execute(
+#         "SELECT id, url, title, html FROM pages WHERE id = ?;", (page_id,)
+#     ).fetchone()
+#     if row is None:
+#         app.logger.info(f"Page not found {page_id}")
+#         abort(404)
+#     back_q = (request.args.get("q") or "").strip()
+#     # Extract meta refresh redirect URL if present
+#     meta_refresh_url = extract_meta_refresh(row["html"]) if row["html"] else None
+#     if meta_refresh_url:
+#         app.logger.info(
+#             f"page_id {page_id} Meta redirect found. Source:{row['html']}: Redirect:{meta_refresh_url}"
+#         )
+#     return render_template(
+#         "page.html",
+#         title=row["title"] or f"Page #{page_id}",
+#         page=row,
+#         back_q=back_q,
+#         meta_refresh_url=meta_refresh_url,
+#     )
 
 
 # -------------------------
@@ -347,21 +355,39 @@ BASE_HTML = """
   <meta charset="utf-8"/>
   <title>{{ title }}</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; }
-    input[type=text] { width: min(720px, 95vw); padding: .6rem; }
-    button { padding: .6rem 1rem; }
-    .result { margin: 1rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 10px; }
-    .muted { color: #666; font-size: .92rem; }
+    /* @see: https://thecascade.dev/article/least-amount-of-css/ */
+    html {
+    color-scheme: light dark;
+    }
+
+    body {
+    font-family: system-ui;
+    font-size: 1.25rem;
+    line-height: 1.5;
+    }
+
+    img,
+    svg,
+    video {
+    max-width: 100%;
+    display: block;
+    }
+
+    main {
+    max-width: min(70ch, 100% - 4rem);
+    margin-inline: auto;
+    }
+
+
+    .right { text-align: right; }
     .tip   { font-size: .92rem; }
-    mark { background: #ffef8a; }
-    a { text-decoration: none; }
-    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <img src="https://gioorgi.com/logos/vic20-anim.gif">
   <h1><a href="{{ url_for('home') }}">Find</a></h1>
   {% block body %}{% endblock %}
+  <footer class="muted right"><a href="https://github.com/daitangio/find">Find {{ find_version }}</a></footer>
 </body>
 </html>
 """
@@ -373,7 +399,10 @@ HOME_HTML = """
   <input type="text" name="q" placeholder="Search..." value="{{ q|default('') }}" autofocus>
   <button type="submit">Search</button>
 </form>
-<p class="tip">Tips:</code>
+<p class="tip">
+Wellcome to Find, a small search application for all gioorgi.com sites.
+<br>
+Some Tips:
 <br>
 <ul>
 <li>Use FTS queries like <code>sqlite OR postgres</code>, <code>title:foo</code>, phrases like <code>"exact phrase"</code>
@@ -420,9 +449,7 @@ SEARCH_HTML = """
         {% if formatted_post_date %}
           <dx class="muted">{{ formatted_post_date }}</dx>
         {% endif %}</a>
-        {% if r.url %}
-          <a href="{{ url_for('page', page_id=r.id) }}"><div class="muted">Cached {{ ("Page #" ~ r.id) }}</div></a>        
-        {% endif %}
+
       </div>
 
       <div>{{ r.snippet|safe }}</div>
@@ -477,4 +504,4 @@ app.jinja_loader = DictLoader(
 
 def web_run():
     # Run: python app.py
-    app.run(host="0.0.0.0", port=7001, debug=False)
+    app.run(host="0.0.0.0", port=7001)

@@ -679,8 +679,8 @@ class Crawler:
     async def logger(self) -> None:
         start_ts = asyncio.get_event_loop().time()
         start_iso = now_iso()
-        # Ensure Sample time is no little than 8 seconds and no more than 60 seconds
-        sample_time = min(max(((self.concurrency * self.delay_s) / 2), 8.0), 60)
+        # Ensure Sample time is no little than 12 seconds and no more than 60 seconds
+        sample_time = min(max(((self.concurrency * self.delay_s) / 2), 12.0), 60)
         expected_page_for_seconds = 1 / self.delay_s
         print(
             f"*** CRAWL Sample time {sample_time}s max_pps={expected_page_for_seconds}"
