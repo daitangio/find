@@ -25,5 +25,6 @@ RUN pip install --no-cache-dir -e .
 
 RUN python3 -m unittest discover -s tests
 EXPOSE 5000
-
-CMD ["/home/app/.local/bin/findgui"]
+COPY initAndFind.sh .
+CMD ["./initAndFind.sh"]
+# CMD ["/home/app/.local/bin/findgui"]

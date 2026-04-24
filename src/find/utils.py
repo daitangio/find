@@ -14,7 +14,7 @@ from importlib import resources
 from importlib.metadata import version
 import aiohttp
 
-DATABASE_FILE = os.path.join(os.getenv("HOME"), ".find.db")
+DATABASE_FILE = os.environ.get("SEARCH_DB", os.path.join(os.environ.get("HOME"), ".find.db"))
 
 
 def fts5_available(conn: sqlite3.Connection) -> bool:
