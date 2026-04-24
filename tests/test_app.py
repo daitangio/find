@@ -4,13 +4,15 @@ import sys
 import tempfile
 import unittest
 
+from datetime import datetime, timezone
+
 ROOT = os.path.dirname(os.path.dirname(__file__))
 SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
 import find.app as find_app
-from find.app import extract_meta_refresh, parse_search_query, search_pages
+from find.app import extract_meta_refresh, find_format_date, parse_search_query, search_pages
 
 
 def create_search_db(path: str) -> None:
@@ -97,6 +99,38 @@ class ParseSearchQueryTests(unittest.TestCase):
     def test_parse_search_query_no_site_term(self) -> None:
         q = "python testing"
         self.assertEqual(parse_search_query(q), "python testing")
+
+
+class FindFormatDateTests(unittest.TestCase):
+    def test_find_format_date_returns_days_ago(self) -> None:
+        now = datetime(2024, 2, 3, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            find_format_date("2024-02-01T00:00:00+00:00", now=now),
+            "2 days ago",
+        )
+
+    def test_find_format_date_returns_years_ago(self) -> None:
+        now = datetime(2026, 2, 1, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            find_format_date("2023-02-01T00:00:00+00:00", now=now),
+            "3 years ago",
+        )
+
+    def test_find_format_date_handles_singular_units(self) -> None:
+        now = datetime(2024, 2, 1, 1, 0, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            find_format_date("2024-02-01T00:00:00+00:00", now=now),
+            "1 hour ago",
+        )
+
+    def test_find_format_date_returns_empty_for_missing_or_invalid_dates(self) -> None:
+        now = datetime(2024, 2, 1, tzinfo=timezone.utc)
+
+        self.assertEqual(find_format_date(None, now=now), "")
+        self.assertEqual(find_format_date("not a date", now=now), "")
 
 
 class SearchPagesTests(unittest.TestCase):

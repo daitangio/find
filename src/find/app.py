@@ -6,7 +6,7 @@ import os
 import sqlite3
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
@@ -86,16 +86,66 @@ def close_db(_exc: Exception | None) -> None:
         conn.close()
 
 
-# Used in the template
-@app.template_filter("format_post_date")
-def format_post_date(value: str | None) -> str:
+def _pluralize(value: int, unit: str) -> str:
+    suffix = "" if value == 1 else "s"
+    return f"{value} {unit}{suffix}"
+
+
+def _format_relative_delta(seconds: int) -> str:
+    if seconds < 60:
+        return "just now"
+
+    units = (
+        ("year", 365 * 24 * 60 * 60),
+        ("month", 30 * 24 * 60 * 60),
+        ("day", 24 * 60 * 60),
+        ("hour", 60 * 60),
+        ("minute", 60),
+    )
+    for unit, unit_seconds in units:
+        if seconds >= unit_seconds:
+            return _pluralize(seconds // unit_seconds, unit)
+    return "just now"
+
+
+def find_format_date(value: str | None, now: datetime | None = None) -> str:
     if not value:
         return ""
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError:
         return ""
-    return parsed.strftime("%b %d, %Y %H:%M")
+
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+
+    if now is None:
+        now = datetime.now(timezone.utc)
+    elif now.tzinfo is None or now.utcoffset() is None:
+        now = now.replace(tzinfo=timezone.utc)
+    else:
+        now = now.astimezone(timezone.utc)
+
+    diff_seconds = int((now - parsed).total_seconds())
+    if diff_seconds < 0:
+        relative = _format_relative_delta(abs(diff_seconds))
+        return "just now" if relative == "just now" else f"in {relative}"
+
+    relative = _format_relative_delta(diff_seconds)
+    return "just now" if relative == "just now" else f"{relative} ago"
+
+
+# Used in the template
+app.add_template_filter(find_format_date, "find_format_date")
+
+
+def format_post_date(value: str | None) -> str:
+    return find_format_date(value)
+
+
+app.add_template_filter(format_post_date, "format_post_date")
 
 
 # -------------------------
@@ -366,7 +416,7 @@ SEARCH_HTML = """
     <div class="result">
       <div>
         [ Score {{r.rank}}] <a title="Score {{r.rank}} Basic." href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong>
-        {% set formatted_post_date = r.post_date|format_post_date %}
+        {% set formatted_post_date = r.post_date|find_format_date %}
         {% if formatted_post_date %}
           <dx class="muted">{{ formatted_post_date }}</dx>
         {% endif %}</a>
