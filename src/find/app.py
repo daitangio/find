@@ -255,12 +255,53 @@ def home():
     return render_template("home.html", title="Home")
 
 
+_FTS_COLUMNS = {"title", "text", "url"}
+_FTS_OPERATORS = {"AND", "OR", "NOT"}
+_FTS_TOKEN_RE = re.compile(r'"[^"]*"|\'[^\']*\'|\S+')
+_FTS_SAFE_BARE_RE = re.compile(r"[\w]+(?:\*)?", re.UNICODE)
+
+
+def _quote_fts_value(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _strip_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def _format_fts_value(value: str) -> str:
+    value = _strip_quotes(value)
+    if _FTS_SAFE_BARE_RE.fullmatch(value) and value != "*":
+        return value
+    return _quote_fts_value(value)
+
+
+def _parse_search_token(token: str) -> str:
+    if token.upper() in _FTS_OPERATORS:
+        return token.upper()
+
+    if token.startswith(("'", '"')):
+        return _quote_fts_value(_strip_quotes(token))
+
+    if ":" in token:
+        column, value = token.split(":", 1)
+        column_lower = column.lower()
+        if column_lower == "site":
+            return f"url:{_quote_fts_value(_strip_quotes(value))}"
+        if column_lower in _FTS_COLUMNS and value:
+            return f"{column_lower}:{_format_fts_value(value)}"
+
+    return _format_fts_value(token)
+
+
 def parse_search_query(q: str) -> str:
-    """Transform site:something into url:"something" for FTS5 queries."""
-    # Match site:domain or site:"domain"
-    # Replace with url:"domain"
-    q = re.sub(r'site:(["\']?)([^\s"\']+)\1', r'url:"\2"', q, flags=re.IGNORECASE)
-    return q
+    """Return an FTS5-safe query while preserving supported search operators."""
+    tokens = [
+        _parse_search_token(match.group(0)) for match in _FTS_TOKEN_RE.finditer(q)
+    ]
+    return " ".join(tokens)
 
 
 def _search_pages_threaded(
@@ -317,6 +358,9 @@ def search():
         )
     except FuturesTimeoutError:
         abort(504, description="Search timed out. Try a simpler query.")
+    except sqlite3.OperationalError:
+        app.logger.exception("Invalid FTS query after parsing: %r", fts_query)
+        abort(400, description="Invalid search query.")
 
 
 # Disabled page cache

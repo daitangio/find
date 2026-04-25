@@ -101,6 +101,18 @@ class ParseSearchQueryTests(unittest.TestCase):
         q = "python testing"
         self.assertEqual(parse_search_query(q), "python testing")
 
+    def test_parse_search_query_quotes_unsafe_punctuation(self) -> None:
+        self.assertEqual(parse_search_query("/"), '"/"')
+        self.assertEqual(parse_search_query("*"), '"*"')
+        self.assertEqual(parse_search_query("example.com/path"), '"example.com/path"')
+
+    def test_parse_search_query_preserves_fts_idioms(self) -> None:
+        self.assertEqual(parse_search_query("sqlite OR postgres"), "sqlite OR postgres")
+        self.assertEqual(parse_search_query("title:python"), "title:python")
+        self.assertEqual(
+            parse_search_query("url:example.com/path"), 'url:"example.com/path"'
+        )
+
 
 class FindFormatDateTests(unittest.TestCase):
     def test_find_format_date_returns_days_ago(self) -> None:
@@ -178,6 +190,23 @@ class SearchPagesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"orderBy=date", response.data)
         self.assertIn(b"offset=1", response.data)
+
+    def test_search_handles_punctuation_only_queries(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            find_app.DB_PATH = db.name
+            find_app.app.config["TESTING"] = True
+            try:
+                slash_response = find_app.app.test_client().get("/search?q=/")
+                star_response = find_app.app.test_client().get("/search?q=*")
+            finally:
+                find_app.DB_PATH = old_db_path
+
+        self.assertEqual(slash_response.status_code, 200)
+        self.assertEqual(star_response.status_code, 200)
+        self.assertIn(b"No results.", slash_response.data)
+        self.assertIn(b"No results.", star_response.data)
 
 
 class AppTemplateTests(unittest.TestCase):
