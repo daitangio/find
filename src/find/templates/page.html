@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+  <p><a href="{{ url_for('search', q=back_q) }}">&larr; back to results</a></p>
+  <h2>{{ page.title or ("Page #" ~ page.id) }}</h2>
+  {% if page.url %}
+    <div class="muted">{{ page.url }}</div>
+  {% endif %}
+  {% if meta_refresh_url %}
+  <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; margin: 1rem 0; border-radius: 5px;">
+    <strong>Warning: This page contains a redirect to:</strong>
+    <a href="{{ meta_refresh_url }}">{{ meta_refresh_url }}</a>
+  </div>
+  {% else %}
+    <div>{{ page.html|safe }}</div>
+  {% endif %}
+  <hr/>
+
+{% endblock %}

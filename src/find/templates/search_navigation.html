@@ -1,0 +1,10 @@
+<div style="margin-top: 1rem;">
+  {% if offset > 0 %}
+    {% set previous_offset = offset - limit %}
+    <a href="{{ url_for('search', q=q, offset=previous_offset if previous_offset > 0 else 0, limit=limit, orderBy=order_by) }}">&larr; Prev</a>
+  {% endif %}
+  {% if offset + limit < total %}
+    <span style="display:inline-block; width: 1rem;"></span>
+    <a href="{{ url_for('search', q=q, offset=offset+limit, limit=limit, orderBy=order_by) }}">Next &rarr;</a>
+  {% endif %}
+</div>

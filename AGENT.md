@@ -25,7 +25,7 @@ The system consists of two main components:
 The project follows several core principles:
 - **Minimalism**: "Less is more" mantra with a target of <2000 lines of code
 - **Zero Configuration**: Works out of the box with sensible defaults
-- **Compact Solution**: All templates and logic inline, minimal dependencies
+- **Compact Solution**: Minimal dependencies with Flask templates kept in the package templates directory
 - **Web Politeness**: Respects robots.txt and implements polite crawling delays
 - **Performance**: Async I/O for crawling, optimized SQLite with FTS5
 
@@ -324,10 +324,11 @@ snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12)
 
 #### UI Design:
 
-**Inline Templates** (keeps project compact):
+**Package Templates** (`src/find/templates`, loaded by Flask):
 - `base.html`: Common layout with VIC-20 logo
 - `home.html`: Search form + tips
-- `search.html`: Results list + pagination
+- `search.html`: Results list + sort controls
+- `search_navigation.html`: Prev/Next pagination controls
 - `page.html`: Cached page display
 
 **Styling:**
@@ -804,10 +805,10 @@ find/
 - Fast enough for target use case
 - Portable (single file)
 
-### 3. Why Inline Templates?
-**Decision:** Embed HTML in Python file  
-**Rationale:** Keep project under 2000 LOC, single-file deployment  
-**Trade-off:** Flexibility vs. compactness
+### 3. Why Package Templates?
+**Decision:** Store HTML in `src/find/templates` and render it with Flask's standard template loader  
+**Rationale:** Keep view code focused on request handling while using Flask's documented package template layout  
+**Trade-off:** A few more files, but cleaner separation between Python logic and markup
 
 ### 4. Why Mono-writer Pattern?
 **Decision:** Single DB writer instead of connection pool  

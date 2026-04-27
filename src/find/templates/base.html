@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>{{ title }}</title>
+  <style>
+    /* @see: https://thecascade.dev/article/least-amount-of-css/ */
+    html {
+        color-scheme: light dark;
+    }
+
+    body {
+        font-family: system-ui;
+        font-size: 1.10rem;
+        line-height: 1.5;
+    }
+
+    img,
+    svg,
+    video {
+        max-width: 100%;
+        display: block;
+    }
+
+    main {
+        max-width: min(70ch, 100% - 4rem);
+        margin-inline: auto;
+    }
+
+
+    .right { text-align: right; }
+    .tip   { font-size: .92rem; }
+    .muted { color: #666; font-size: .92rem; }
+    mark { background: #ffef8a; }
+  </style>
+</head>
+<body>
+  <img src="https://gioorgi.com/logos/vic20-anim.gif">
+  <h1><a href="{{ url_for('home') }}">Find</a></h1>
+  <div class="main">
+        Wellcome to Find, a small search application for all gioorgi.com sites.
+        <br>
+        Some Tips:
+        <ul>
+        <li>Use FTS queries like <a href="/search?q=sqlite+OR+postgres">sqlite OR postgres</a>,
+        <a href="/search?q=title%3Agit">title:git</a>, use double quote to search exact phrases like <a href="/search?q=title%3Agit">"title git"</a>
+        <li>Google-like <a href="/search?q=site:8bit.gioorgi.com">site:8bit.gioorgi.com syntax</a> is supported, for instance to search only on companion sites
+        </ul>
+        Note: a rate limiter is active by default.
+        <p>
+        {% block body %}{% endblock %}
+        </p>
+  </div>
+  <footer class="muted right"><a href="https://github.com/daitangio/find">Find {{ find_version }}</a></footer>
+</body>
+</html>

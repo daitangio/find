@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block body %}
+<form action="{{ url_for('search') }}" method="get">
+  <input type="text" name="q" placeholder="Search..." value="{{ q }}" autofocus>
+  <button type="submit">Search</button>
+</form>
+
+{% if q and total == 0 %}
+  <p>No results.</p>
+{% endif %}
+
+{% if total > 0 %}
+  <p class="muted">{{ total }} result(s). Showing Page {{ 1+(offset//10) }} of {{ 1+ (total // 10)}}.</p>
+  <p class="muted">
+    Sort:
+    {% if order_by == "date" %}
+      <a href="{{ url_for('search', q=q, offset=0, limit=limit, orderBy='rank') }}">relevance</a>
+      <strong>date</strong>
+    {% else %}
+      <strong>relevance</strong>
+      <a href="{{ url_for('search', q=q, offset=0, limit=limit, orderBy='date') }}">date</a>
+    {% endif %}
+    {% include "search_navigation.html" %}    
+  </p>
+
+  {% for r in results %}
+    <div class="result">
+      <div>
+        [ Score {{r.rank}}] <a title="Score {{r.rank}} Basic." href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong>
+        {% set formatted_post_date = r.post_date|find_format_date %}
+        {% if formatted_post_date %}
+          <dx class="muted">{{ formatted_post_date }}</dx>
+        {% endif %}</a>
+        {% if r.url %}
+        <div class="muted"><a href="{{ url_for('page', page_id=r.id) }}" title="Cached {{ ("Page #" ~ r.id) }}">[Cached version]</a></div>
+        {% endif %}
+      </div>
+      <div>{{ r.snippet|safe }}</div>
+    </div>
+  {% endfor %}
+
+  {% include "search_navigation.html" %}
+{% endif %}
+{% endblock %}

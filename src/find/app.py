@@ -16,8 +16,6 @@ from flask import Flask, g, redirect, render_template, request, url_for, abort
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-from jinja2 import DictLoader
-
 from find import utils
 
 
@@ -354,14 +352,12 @@ def search():
             limit=limit,
             offset=offset,
             order_by=order_by,
-            max=max,
         )
     except FuturesTimeoutError:
         abort(504, description="Search timed out. Try a simpler query.")
     except sqlite3.OperationalError:
         app.logger.exception("Invalid FTS query after parsing: %r", fts_query)
         abort(400, description="Invalid search query.")
-
 
 
 @app.route("/page/<int:page_id>")
@@ -387,166 +383,6 @@ def page(page_id: int):
         back_q=back_q,
         meta_refresh_url=meta_refresh_url,
     )
-
-
-# -------------------------
-# UI templates (inline to keep it small)
-# -------------------------
-BASE_HTML = """
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>{{ title }}</title>
-  <style>
-    /* @see: https://thecascade.dev/article/least-amount-of-css/ */
-    html {
-        color-scheme: light dark;
-    }
-
-    body {
-        font-family: system-ui;
-        font-size: 1.10rem;
-        line-height: 1.5;
-    }
-
-    img,
-    svg,
-    video {
-        max-width: 100%;
-        display: block;
-    }
-
-    main {
-        max-width: min(70ch, 100% - 4rem);
-        margin-inline: auto;
-    }
-
-
-    .right { text-align: right; }
-    .tip   { font-size: .92rem; }
-    .muted { color: #666; font-size: .92rem; }
-    mark { background: #ffef8a; }
-  </style>
-</head>
-<body>
-  <img src="https://gioorgi.com/logos/vic20-anim.gif">
-  <h1><a href="{{ url_for('home') }}">Find</a></h1>
-  <div class="main">  
-        Wellcome to Find, a small search application for all gioorgi.com sites.
-        <br>
-        Some Tips:        
-        <ul>
-        <li>Use FTS queries like <a href="/search?q=sqlite+OR+postgres">sqlite OR postgres</a>,
-        <a href="/search?q=title%3Agit">title:git</a>, use double quote to search exact phrases like <a href="/search?q=title%3Agit">"title git"</a>
-        <li>Google-like <a href="/search?q=site:8bit.gioorgi.com">site:8bit.gioorgi.com syntax</a> is supported, for instance to search only on companion sites
-        </ul>        
-        Note: a rate limiter is active by default.        
-        <p>
-        {% block body %}{% endblock %}
-        </p>
-  </div>
-  <footer class="muted right"><a href="https://github.com/daitangio/find">Find {{ find_version }}</a></footer>
-</body>
-</html>
-"""
-
-HOME_HTML = """
-{% extends "base.html" %}
-{% block body %}
-<form action="{{ url_for('search') }}" method="get">
-  <input type="text" name="q" placeholder="Search..." value="{{ q|default('') }}" autofocus>
-  <button type="submit">Search</button>
-</form>
-
-{% endblock %}
-"""
-
-SEARCH_HTML = """
-{% extends "base.html" %}
-{% block body %}
-<form action="{{ url_for('search') }}" method="get">
-  <input type="text" name="q" placeholder="Search..." value="{{ q }}" autofocus>
-  <button type="submit">Search</button>
-</form>
-
-{% if q and total == 0 %}
-  <p>No results.</p>
-{% endif %}
-
-{% if total > 0 %}
-  <p class="muted">{{ total }} result(s). Showing Page {{ 1+(offset//10) }} of {{ 1+ (total // 10)}}.</p>
-  <p class="muted">
-    Sort:
-    {% if order_by == "date" %}
-      <a href="{{ url_for('search', q=q, offset=0, limit=limit, orderBy='rank') }}">relevance</a>
-      <strong>date</strong>
-    {% else %}
-      <strong>relevance</strong>
-      <a href="{{ url_for('search', q=q, offset=0, limit=limit, orderBy='date') }}">date</a>
-    {% endif %}
-  </p>
-
-  {% for r in results %}
-    <div class="result">
-      <div>
-        [ Score {{r.rank}}] <a title="Score {{r.rank}} Basic." href="{{ r.url }}"><strong>{{ r.title or ("Page #" ~ r.id) }}</strong>
-        {% set formatted_post_date = r.post_date|find_format_date %}
-        {% if formatted_post_date %}
-          <dx class="muted">{{ formatted_post_date }}</dx>
-        {% endif %}</a>
-        {% if r.url %}
-        <div class="muted"><a href="{{ url_for('page', page_id=r.id) }}" title="Cached {{ ("Page #" ~ r.id) }}">[Cached version]</a></div>
-        {% endif %}
-      </div>
-      <div>{{ r.snippet|safe }}</div>
-    </div>
-  {% endfor %}
-
-  <div style="margin-top: 1rem;">
-    {% if offset > 0 %}
-      <a href="{{ url_for('search', q=q, offset=max(offset-limit,0), limit=limit, orderBy=order_by) }}">← Prev</a>
-    {% endif %}
-    {% if offset + limit < total %}
-      <span style="display:inline-block; width: 1rem;"></span>
-      <a href="{{ url_for('search', q=q, offset=offset+limit, limit=limit, orderBy=order_by) }}">Next →</a>
-    {% endif %}
-  </div>
-{% endif %}
-{% endblock %}
-"""
-
-PAGE_HTML = """
-{% extends "base.html" %}
-{% block body %}
-  <p><a href="{{ url_for('search', q=back_q) }}">← back to results</a></p>
-  <h2>{{ page.title or ("Page #" ~ page.id) }}</h2>
-  {% if page.url %}
-    <div class="muted">{{ page.url }}</div>
-  {% endif %}
-  {% if meta_refresh_url %}
-  <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 1rem; margin: 1rem 0; border-radius: 5px;">
-    <strong>⚠️ This page contains a redirect to:</strong>
-    <a href="{{ meta_refresh_url }}">{{ meta_refresh_url }}</a>
-  </div>
-  {% else %}
-    <div>{{ page.html|safe }}</div>  
-  {% endif %}
-  <hr/>
-  
-{% endblock %}
-"""
-
-# Register inline templates with Flask
-app.jinja_loader = DictLoader(
-    {
-        "base.html": BASE_HTML,
-        "home.html": HOME_HTML,
-        "search.html": SEARCH_HTML,
-        "page.html": PAGE_HTML,
-    }
-)
-
 
 
 def web_run():
