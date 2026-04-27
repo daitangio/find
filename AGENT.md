@@ -39,11 +39,12 @@ The project follows several core principles:
 **Key Dependencies:**
 ```python
 beautifulsoup4>=4.14.3    # HTML parsing
-aiohttp==3.13.3           # Async HTTP client
+aiohttp==3.13.4           # Async HTTP client
 aiosqlite==0.22.1         # Async SQLite wrapper
 Flask>=3.1.2              # Web framework
 click>=8.3.1              # CLI interface
 Flask-Limiter>=3.5.0      # Rate limiting & DDoS protection
+gunicorn>=23.0.0          # Production WSGI server used by Docker
 ```
 
 **Build System:**
@@ -437,28 +438,18 @@ black $(git ls-files '*.py')  # Code formatting
 **Dockerfile Highlights:**
 - Base: `python:3.14-slim-trixie` (Debian Trixie)
 - Non-root user: `app:app` (UID/GID 1000)
-- Runs tests during build
+- Installs the application plus Gunicorn
+- Runs the Flask app through Gunicorn bound to `0.0.0.0:7001`
 - Environment:
-  - `SEARCH_DB=/opt/find/search.db`
-  - `TZ=Europe/Rome`
   - `FLASK_ENV=production`
+  - `FIND_WEB_WORKERS=4` by default; override to tune Gunicorn worker processes
 
 **docker-compose.yml:**
-- Port mapping: `49152:5000` (external:internal)
+- Port mapping: `49152:7001` (external:internal)
+- Environment: `SEARCH_DB=/opt/find/search.db`, `TZ=Europe/Rome`, `REINDEX_INTERVAL_HOURS=8`
 - Volume: `/opt/find` (persistent storage for DB)
-- Healthcheck: HTTP request to `localhost:5000`
-  - Interval: 10s
-  - Timeout: 3s
-  - Start period: 5s
-- Resource limits: 0.90 CPU, 1 CPU count
+- Resource limit: 1.90 CPU
 - Optional syslog logging (commented)
-
-**Health Monitoring:**
-- Python-based healthcheck (no curl dependency)
-- Restart unhealthy containers manually:
-```bash
-docker ps -q -f health=unhealthy | xargs --no-run-if-empty docker restart
-```
 
 ### Local Development
 
@@ -876,7 +867,7 @@ PRAGMA journal_size_limit = 67108864;  -- 64MB journal
 ### Web Interface Tuning
 
 **For High Traffic:**
-- Use gunicorn: `gunicorn -w 4 -b 0.0.0.0:5000 find.app:app`
+- Use gunicorn: `FIND_WEB_WORKERS=4 gunicorn -w "$FIND_WEB_WORKERS" -b 0.0.0.0:7001 find.app:app`
 - Increase rate limits
 - Add reverse proxy (nginx) for caching
 
@@ -956,7 +947,7 @@ It's **not suitable** for:
 - Core functionality well-covered
 
 **Dependencies:**
-- Runtime: 6 packages
+- Runtime: 7 packages
 - Build: 1 package (flit_core)
 - Total footprint: ~50MB (Docker image size would be ~150-200MB)
 

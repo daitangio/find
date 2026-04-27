@@ -12,3 +12,8 @@ Install on Install your virtualenv with
 
     python3 -m unittest discover -s tests && pylint $(git ls-files '*.py')
     
+# Dockerized test run
+
+To just populate a throw-away database:
+
+FIND_HOME=/tmp docker compose up --build

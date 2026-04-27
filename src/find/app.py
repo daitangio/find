@@ -363,30 +363,30 @@ def search():
         abort(400, description="Invalid search query.")
 
 
-# Disabled page cache
-# @app.route("/page/<int:page_id>")
-# def page(page_id: int):
-#     conn = get_db()
-#     row = conn.execute(
-#         "SELECT id, url, title, html FROM pages WHERE id = ?;", (page_id,)
-#     ).fetchone()
-#     if row is None:
-#         app.logger.info(f"Page not found {page_id}")
-#         abort(404)
-#     back_q = (request.args.get("q") or "").strip()
-#     # Extract meta refresh redirect URL if present
-#     meta_refresh_url = extract_meta_refresh(row["html"]) if row["html"] else None
-#     if meta_refresh_url:
-#         app.logger.info(
-#             f"page_id {page_id} Meta redirect found. Source:{row['html']}: Redirect:{meta_refresh_url}"
-#         )
-#     return render_template(
-#         "page.html",
-#         title=row["title"] or f"Page #{page_id}",
-#         page=row,
-#         back_q=back_q,
-#         meta_refresh_url=meta_refresh_url,
-#     )
+
+@app.route("/page/<int:page_id>")
+def page(page_id: int):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, url, title, html FROM pages WHERE id = ?;", (page_id,)
+    ).fetchone()
+    if row is None:
+        app.logger.info(f"Page not found {page_id}")
+        abort(404)
+    back_q = (request.args.get("q") or "").strip()
+    # Extract meta refresh redirect URL if present
+    meta_refresh_url = extract_meta_refresh(row["html"]) if row["html"] else None
+    if meta_refresh_url:
+        app.logger.info(
+            f"page_id {page_id} Meta redirect found. Source:{row['html']}: Redirect:{meta_refresh_url}"
+        )
+    return render_template(
+        "page.html",
+        title=row["title"] or f"Page #{page_id}",
+        page=row,
+        back_q=back_q,
+        meta_refresh_url=meta_refresh_url,
+    )
 
 
 # -------------------------
@@ -401,36 +401,51 @@ BASE_HTML = """
   <style>
     /* @see: https://thecascade.dev/article/least-amount-of-css/ */
     html {
-    color-scheme: light dark;
+        color-scheme: light dark;
     }
 
     body {
-    font-family: system-ui;
-    font-size: 1.25rem;
-    line-height: 1.5;
+        font-family: system-ui;
+        font-size: 1.10rem;
+        line-height: 1.5;
     }
 
     img,
     svg,
     video {
-    max-width: 100%;
-    display: block;
+        max-width: 100%;
+        display: block;
     }
 
     main {
-    max-width: min(70ch, 100% - 4rem);
-    margin-inline: auto;
+        max-width: min(70ch, 100% - 4rem);
+        margin-inline: auto;
     }
 
 
     .right { text-align: right; }
     .tip   { font-size: .92rem; }
+    .muted { color: #666; font-size: .92rem; }
+    mark { background: #ffef8a; }
   </style>
 </head>
 <body>
   <img src="https://gioorgi.com/logos/vic20-anim.gif">
   <h1><a href="{{ url_for('home') }}">Find</a></h1>
-  {% block body %}{% endblock %}
+  <div class="main">  
+        Wellcome to Find, a small search application for all gioorgi.com sites.
+        <br>
+        Some Tips:        
+        <ul>
+        <li>Use FTS queries like <a href="/search?q=sqlite+OR+postgres">sqlite OR postgres</a>,
+        <a href="/search?q=title%3Agit">title:git</a>, use double quote to search exact phrases like <a href="/search?q=title%3Agit">"title git"</a>
+        <li>Google-like <a href="/search?q=site:8bit.gioorgi.com">site:8bit.gioorgi.com syntax</a> is supported, for instance to search only on companion sites
+        </ul>        
+        Note: a rate limiter is active by default.        
+        <p>
+        {% block body %}{% endblock %}
+        </p>
+  </div>
   <footer class="muted right"><a href="https://github.com/daitangio/find">Find {{ find_version }}</a></footer>
 </body>
 </html>
@@ -443,20 +458,7 @@ HOME_HTML = """
   <input type="text" name="q" placeholder="Search..." value="{{ q|default('') }}" autofocus>
   <button type="submit">Search</button>
 </form>
-<p class="tip">
-Wellcome to Find, a small search application for all gioorgi.com sites.
-<br>
-Some Tips:
-<br>
-<ul>
-<li>Use FTS queries like <code>sqlite OR postgres</code>, <code>title:foo</code>, phrases like <code>"exact phrase"</code>
-<li><a href="/search?q=url%3A%228bit.gioorgi.com%22">Search 8bit computers site only</a>
-<li>Google-like <a href="/search?q=site:8bit.gioorgi.com">site:8bit.gioorgi.com syntax</a> is supported.
-</ul>
-<p>
-Note: a rate limiter is active by default.
-</p>
-</p>
+
 {% endblock %}
 """
 
@@ -493,9 +495,10 @@ SEARCH_HTML = """
         {% if formatted_post_date %}
           <dx class="muted">{{ formatted_post_date }}</dx>
         {% endif %}</a>
-
+        {% if r.url %}
+        <div class="muted"><a href="{{ url_for('page', page_id=r.id) }}" title="Cached {{ ("Page #" ~ r.id) }}">[Cached version]</a></div>
+        {% endif %}
       </div>
-
       <div>{{ r.snippet|safe }}</div>
     </div>
   {% endfor %}

@@ -2,9 +2,10 @@ FROM python:3.14-slim-trixie
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    FLASK_APP=app.py \
+    FLASK_APP=find.app:app \
     FLASK_ENV=production \
-    FLASK_RUN_HOST=0.0.0.0
+    FLASK_RUN_HOST=0.0.0.0 \
+    FIND_WEB_WORKERS=4
 ENV PATH="$PATH:/home/app/.local/bin"
 
 RUN addgroup --gid 1000  app && adduser --uid 1000 --ingroup app  app

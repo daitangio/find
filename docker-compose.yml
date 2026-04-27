@@ -7,14 +7,11 @@ services:
       TZ: 'Europe/Rome'
       FLASK_DEBUG: false
       REINDEX_INTERVAL_HOURS: 8
+      FIND_WEB_WORKERS: 2
     ports:
       - "49152:7001"
-    # Ensure around 2 cpu - 10%
+    # Ensure around 2 cpu minus 10% 
     cpus: 1.90
     volumes:
-      - /opt/find:/opt/find
-    # logging:
-    #   driver: syslog
-    #   options:
-    #     tag: "find"
-    #     syslog-facility: "16"      
+      - $FIND_HOME:/opt/find
+    

@@ -2,11 +2,16 @@
 set -eu
 echo ID: $(id)
 export PATH=$PATH:/home/app/.local/bin/
-findgui &
-echo Reinde will occur every $REINDEX_INTERVAL_HOURS hours
+# Ensure database is presnt
+crawl --seed https://gioorgi.com --same-host  --max-pages 3
+echo "TOOO Powerful to be commercial. Web Workers: ${FIND_WEB_WORKERS:-4}"
+gunicorn --workers "${FIND_WEB_WORKERS:-4}" --bind 0.0.0.0:7001 --access-logfile - find.app:app &
+echo ======================================================================
+echo Reindex will occur every $REINDEX_INTERVAL_HOURS hours
+echo ======================================================================
 while true; do
- sleep 5
  date
+ echo ======================================================================
  # Separated for the meantime
  crawl --seed https://8bit.gioorgi.com --same-host
  crawl --seed https://gioorgi.com --same-host 

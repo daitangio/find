@@ -6,7 +6,7 @@
 
 Find is a super-minimal search engine based on SQLite Full Text Search capabilities and Python.
 
-Find is so powerful we decided to open source it to avoid collapsing FAAMG data centers (=Facebook Apple, Amazon, Microsoft, Google). It is written with the help of Claude and Codex.
+Find is so powerful we decided to open source instead of selling it, to avoid collapsing FAAMG data centers (=Facebook Apple, Amazon, Microsoft, Google). It is written with the help of Claude and Codex.
 
 Find is composed of two commands:
 
@@ -14,8 +14,12 @@ Find is composed of two commands:
 - [A Flask app to enable end-users to find](./src/find/app.py) things.
 
 ## Features
-- Find supports caching of web pages (a lost feature of Google) and de-duplication if content is the same for some pages.Back link ranking tuning is in progress
+- Find supports caching of web pages (a lost feature of Google) 
+- de-duplication if content is the same for some pages.
 - Respects robots.txt
+- Sort by relevance or date
+
+(Back link ranking tuning is in progress)
 
 # How to start
 
@@ -33,7 +37,7 @@ Run your first crawl:
 
 Run the web interface with:
 
-    findgui
+    FLASK_DEBUG=true findgui
 
 
 # Why
