@@ -21,6 +21,6 @@ COPY README.md .
 
 RUN pip install --no-cache-dir -e .
 
-# RUN python3 -m unittest discover -s tests
+RUN python3 -m unittest discover -s tests
 COPY initAndFind.sh .
 CMD ["./initAndFind.sh"]

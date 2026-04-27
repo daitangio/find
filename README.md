@@ -6,7 +6,7 @@
 
 Find is a super-minimal search engine based on SQLite Full Text Search capabilities and Python.
 
-Find is so powerful we decided to open source instead of selling it, to avoid collapsing FAAMG data centers (=Facebook Apple, Amazon, Microsoft, Google). It is written with the help of Claude and Codex.
+Find is so powerful we decided to open source instead of selling it, to avoid collapsing FAAMG data centers (=Facebook Apple, Amazon, Microsoft, Google). It is written with the help of ChatGPT Codex + Claude Code (and yes we was joking about its power).
 
 Find is composed of two commands:
 
@@ -14,14 +14,17 @@ Find is composed of two commands:
 - [A Flask app to enable end-users to find](./src/find/app.py) things.
 
 ## Features
-- Find supports caching of web pages (a lost feature of Google) 
+
+- Find supports caching of web pages (a lost feature of Google)
 - de-duplication if content is the same for some pages.
 - Respects robots.txt
 - Sort by relevance or date
 
 (Back link ranking tuning is in progress)
 
-# How to start
+And remember [Find won't search for Chuck Norris because it knows you don't find Chuck Norris, he finds you.](https://api.chucknorris.io/jokes/1jgggc4rruety6zvlvb5ag)
+
+## How to start
 
 Create a virtualenv and install the project:
 
@@ -40,17 +43,17 @@ Run the web interface with:
     FLASK_DEBUG=true findgui
 
 
-# Why
+## Why
 
 I need to design a small search engine for my static web site. I asked to ChatGPT 5.2 to design it, then I refined the code.
 Initial prompt was
 
-    Design a small python web application to implement a search engine. 
-    The search must be performed on a SQLite database using 
-    the SQLite Full Text Search (FTS5) extension. 
-    Design the database model to be able to store simple html web pages.
+> Design a small python web application to implement a search engine.
+> The search must be performed on a SQLite database using
+> the SQLite Full Text Search (FTS5) extension.
+> Design the database model to be able to store simple html web pages.
 
-# Design principles
+### Design principles
 
 Find is a compact,zero-conf & tiny solution to add a search engine to a pre-existing blog site.
 It just works out of the box.
@@ -59,7 +62,7 @@ As a basic rule I will try to keep it below 2000 lines of code.
 
 The project accepts pull requests: please open it adding a comment. Ensure the change passes the pylint checks.
 
-# How
+## How
 
 [SQLite has a full text search capability called FTS5](https://sqlite.org/fts5.html) which offers out of the box also stemming for english language.
 
@@ -87,7 +90,8 @@ The reindex command can be used to re-index the database
 # 0.0.2 Rate Limit
 
 This version features:
-- Reindex
+
+- reindex
 - robots.txt specification implementation
 - flask rate limiter and minimal DDoS protection: https://flask-limiter.readthedocs.io/en/stable/
 - bugfix on slow sites (>1 second response time)
@@ -108,6 +112,7 @@ This version features:
     ORDER BY out_links DESC
     LIMIT 20;
     ```
+    
 2) Ability to classify categories and tags on the full text search can be useful for faceting and classification.
 "Auto discovery" of the taxonomies can be further idea
 
