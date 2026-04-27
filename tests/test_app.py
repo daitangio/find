@@ -1,3 +1,4 @@
+import importlib
 import os
 import sqlite3
 import sys
@@ -13,7 +14,12 @@ if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
 import find.app as find_app
-from find.app import extract_meta_refresh, find_format_date, parse_search_query, search_pages
+from find.app import (
+    extract_meta_refresh,
+    find_format_date,
+    parse_search_query,
+    search_pages,
+)
 
 
 def create_search_db(path: str) -> None:
@@ -158,7 +164,9 @@ class SearchPagesTests(unittest.TestCase):
                 conn.close()
 
         self.assertEqual(total, 3)
-        self.assertEqual([result.title for result in results], ["New", "Old", "Undated"])
+        self.assertEqual(
+            [result.title for result in results], ["New", "Old", "Undated"]
+        )
 
     def test_search_template_links_to_date_sort(self) -> None:
         old_db_path = find_app.DB_PATH
@@ -207,6 +215,49 @@ class SearchPagesTests(unittest.TestCase):
         self.assertEqual(star_response.status_code, 200)
         self.assertIn(b"No results.", slash_response.data)
         self.assertIn(b"No results.", star_response.data)
+
+
+class CachedPageConfigTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        importlib.reload(find_app)
+
+    def test_cached_page_enabled_exposes_link_and_route(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with patch.dict(os.environ, {"FIND_SHOW_CACHED_PAGE": "enabled"}):
+            reloaded_app = importlib.reload(find_app)
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            reloaded_app.DB_PATH = db.name
+            reloaded_app.app.config["TESTING"] = True
+            try:
+                with reloaded_app.app.test_client() as client:
+                    search_response = client.get("/search?q=alpha")
+                    page_response = client.get("/page/1")
+            finally:
+                reloaded_app.DB_PATH = old_db_path
+
+        self.assertEqual(search_response.status_code, 200)
+        self.assertIn(b"[Cached version]", search_response.data)
+        self.assertEqual(page_response.status_code, 200)
+
+    def test_cached_page_disabled_hides_link_and_route(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with patch.dict(os.environ, {"FIND_SHOW_CACHED_PAGE": "disabled"}):
+            reloaded_app = importlib.reload(find_app)
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            reloaded_app.DB_PATH = db.name
+            reloaded_app.app.config["TESTING"] = True
+            try:
+                with reloaded_app.app.test_client() as client:
+                    search_response = client.get("/search?q=alpha")
+                    page_response = client.get("/page/1")
+            finally:
+                reloaded_app.DB_PATH = old_db_path
+
+        self.assertEqual(search_response.status_code, 200)
+        self.assertNotIn(b"[Cached version]", search_response.data)
+        self.assertEqual(page_response.status_code, 404)
 
 
 class AppTemplateTests(unittest.TestCase):

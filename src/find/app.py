@@ -20,14 +20,19 @@ from find import utils
 
 
 DB_PATH = os.environ.get("SEARCH_DB", os.path.join(os.environ.get("HOME"), ".find.db"))
+FIND_SHOW_CACHED_PAGE = "FIND_SHOW_CACHED_PAGE"
 
 
 app = Flask(__name__)
 
 
 @app.context_processor
-def inject_find_version() -> dict[str, str]:
-    return {"find_version": utils.get_version()}
+def inject_find_config() -> dict[str, str | bool]:
+    return {
+        "find_version": utils.get_version(),
+        "find_show_cached_page": app.config[FIND_SHOW_CACHED_PAGE],
+    }
+
 
 # -------------------------
 # Rate Limiting (DDoS protection 1)
@@ -54,6 +59,23 @@ _search_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="search"
 # LINK_BOOST_CAP = int(os.environ.get("LINK_BOOST_CAP", "20"))
 
 ###########################################################
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on", "enabled", "enable"}:
+        return True
+    if normalized in {"0", "false", "no", "off", "disabled", "disable"}:
+        return False
+
+    raise RuntimeError(f"{name} must be enabled or disabled, got {value!r}")
+
+
+app.config[FIND_SHOW_CACHED_PAGE] = _env_flag(FIND_SHOW_CACHED_PAGE, default=True)
 
 
 # -------------------------
@@ -360,7 +382,6 @@ def search():
         abort(400, description="Invalid search query.")
 
 
-@app.route("/page/<int:page_id>")
 def page(page_id: int):
     conn = get_db()
     row = conn.execute(
@@ -383,6 +404,10 @@ def page(page_id: int):
         back_q=back_q,
         meta_refresh_url=meta_refresh_url,
     )
+
+
+if app.config[FIND_SHOW_CACHED_PAGE]:
+    app.add_url_rule("/page/<int:page_id>", endpoint="page", view_func=page)
 
 
 def web_run():

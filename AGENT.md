@@ -321,6 +321,7 @@ snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12)
 - Back link to search results
 - Meta refresh warning if present
 - Displays raw HTML or redirect message
+- Registered only when `FIND_SHOW_CACHED_PAGE` is enabled
 
 #### UI Design:
 
@@ -444,10 +445,11 @@ black $(git ls-files '*.py')  # Code formatting
 - Environment:
   - `FLASK_ENV=production`
   - `FIND_WEB_WORKERS=4` by default; override to tune Gunicorn worker processes
+  - `FIND_SHOW_CACHED_PAGE=enabled` exposes cached page links and `/page/<id>`; disabled hides both
 
 **docker-compose.yml:**
 - Port mapping: `49152:7001` (external:internal)
-- Environment: `SEARCH_DB=/opt/find/search.db`, `TZ=Europe/Rome`, `REINDEX_INTERVAL_HOURS=8`
+- Environment: `SEARCH_DB=/opt/find/search.db`, `TZ=Europe/Rome`, `REINDEX_INTERVAL_HOURS=8`, `FIND_SHOW_CACHED_PAGE=disabled`
 - Volume: `/opt/find` (persistent storage for DB)
 - Resource limit: 1.90 CPU
 - Optional syslog logging (commented)
@@ -868,7 +870,7 @@ PRAGMA journal_size_limit = 67108864;  -- 64MB journal
 ### Web Interface Tuning
 
 **For High Traffic:**
-- Use gunicorn: `FIND_WEB_WORKERS=4 gunicorn -w "$FIND_WEB_WORKERS" -b 0.0.0.0:7001 find.app:app`
+- Use gunicorn: `FIND_WEB_WORKERS=4 FIND_SHOW_CACHED_PAGE=disabled gunicorn -w "$FIND_WEB_WORKERS" -b 0.0.0.0:7001 find.app:app`
 - Increase rate limits
 - Add reverse proxy (nginx) for caching
 
