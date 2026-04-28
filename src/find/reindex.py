@@ -4,6 +4,7 @@ Docstring for find.reindex
 Reindex the pages stored in the database.
 Remove all the data from pages_fts and re-populate it from most recent pages, using the same logic inside crawl.py
 """
+
 from __future__ import annotations
 
 import asyncio

@@ -1,17 +1,12 @@
 import importlib
 import os
 import sqlite3
-import sys
 import tempfile
 import unittest
 
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-ROOT = os.path.dirname(os.path.dirname(__file__))
-SRC = os.path.join(ROOT, "src")
-if SRC not in sys.path:
-    sys.path.insert(0, SRC)
 
 import find.app as find_app
 from find.app import (
@@ -20,6 +15,8 @@ from find.app import (
     parse_search_query,
     search_pages,
 )
+
+ROOT = os.path.dirname(os.path.dirname(__file__))
 
 
 def create_search_db(path: str) -> None:

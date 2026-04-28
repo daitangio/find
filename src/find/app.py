@@ -18,7 +18,6 @@ from flask_limiter.util import get_remote_address
 
 from find import utils
 
-
 DB_PATH = os.environ.get("SEARCH_DB", os.path.join(os.environ.get("HOME"), ".find.db"))
 FIND_SHOW_CACHED_PAGE = "FIND_SHOW_CACHED_PAGE"
 
