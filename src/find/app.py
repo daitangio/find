@@ -76,7 +76,7 @@ def _env_flag(name: str, default: bool = False) -> bool:
     raise RuntimeError(f"{name} must be enabled or disabled, got {value!r}")
 
 
-app.config[FIND_SHOW_CACHED_PAGE] = _env_flag(FIND_SHOW_CACHED_PAGE, default=True)
+app.config[FIND_SHOW_CACHED_PAGE] = _env_flag(FIND_SHOW_CACHED_PAGE, default=False)
 
 
 # -------------------------

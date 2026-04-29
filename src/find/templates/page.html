@@ -11,7 +11,13 @@
     <a href="{{ meta_refresh_url }}">{{ meta_refresh_url }}</a>
   </div>
   {% else %}
-    <div>{{ page.html|safe }}</div>
+    <iframe
+      title="Cached page content"
+      sandbox
+      referrerpolicy="no-referrer"
+      srcdoc="{{ page.html }}"
+      style="width: 100%; min-height: 70vh; border: 1px solid #ccc;"
+    ></iframe>
   {% endif %}
   <hr/>
 

@@ -308,6 +308,26 @@ class CachedPageConfigTests(unittest.TestCase):
         self.assertIn(b"[Cached version]", search_response.data)
         self.assertEqual(page_response.status_code, 200)
 
+    def test_cached_page_default_hides_link_and_route(self) -> None:
+        old_db_path = find_app.DB_PATH
+        clean_env = {"HOME": os.environ.get("HOME", "/tmp")}
+        with patch.dict(os.environ, clean_env, clear=True):
+            reloaded_app = importlib.reload(find_app)
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            reloaded_app.DB_PATH = db.name
+            reloaded_app.app.config["TESTING"] = True
+            try:
+                with reloaded_app.app.test_client() as client:
+                    search_response = client.get("/search?q=alpha")
+                    page_response = client.get("/page/1")
+            finally:
+                reloaded_app.DB_PATH = old_db_path
+
+        self.assertEqual(search_response.status_code, 200)
+        self.assertNotIn(b"[Cached version]", search_response.data)
+        self.assertEqual(page_response.status_code, 404)
+
     def test_cached_page_disabled_hides_link_and_route(self) -> None:
         old_db_path = find_app.DB_PATH
         with patch.dict(os.environ, {"FIND_SHOW_CACHED_PAGE": "disabled"}):
@@ -326,6 +346,26 @@ class CachedPageConfigTests(unittest.TestCase):
         self.assertEqual(search_response.status_code, 200)
         self.assertNotIn(b"[Cached version]", search_response.data)
         self.assertEqual(page_response.status_code, 404)
+
+    def test_cached_page_renders_html_in_sandboxed_iframe(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with patch.dict(os.environ, {"FIND_SHOW_CACHED_PAGE": "enabled"}):
+            reloaded_app = importlib.reload(find_app)
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            reloaded_app.DB_PATH = db.name
+            reloaded_app.app.config["TESTING"] = True
+            try:
+                response = reloaded_app.app.test_client().get("/page/1")
+            finally:
+                reloaded_app.DB_PATH = old_db_path
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"<iframe", response.data)
+        self.assertIn(b"sandbox", response.data)
+        self.assertIn(b'referrerpolicy="no-referrer"', response.data)
+        self.assertIn(b'srcdoc="&lt;p&gt;alpha old&lt;/p&gt;"', response.data)
+        self.assertNotIn(b"<div><p>alpha old</p></div>", response.data)
 
 
 class AppTemplateTests(unittest.TestCase):
