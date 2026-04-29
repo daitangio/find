@@ -214,6 +214,7 @@ def search_pages(
     if order_by == "date":
         order_clause = "p.post_date IS NULL ASC, p.post_date DESC, score ASC"
 
+    # GG: We use snippet with -1 to be sure the system select the right field (which could also be the title)    
     rows = conn.execute(
         f"""
         WITH inbound AS (
@@ -226,7 +227,7 @@ def search_pages(
           p.id,
           p.url,
           p.title,
-          snippet(pages_fts, 1, '<mark>', '</mark>', ' … ', 12) AS snippet,          
+          snippet(pages_fts, -1, '<mark>', '</mark>', ' … ', 12) AS snippet,          
           bm25(pages_fts) as score,
           p.status_code,
           p.post_date

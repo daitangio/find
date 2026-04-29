@@ -65,6 +65,17 @@ def create_search_db(path: str) -> None:
                     "2024-03-01T00:00:00+00:00",
                     None,
                 ),
+                (
+                    4,
+                    "https://example.com/pizza",
+                    "Pizza Menu",
+                    "<p>tomato basil</p>",
+                    "tomato basil",
+                    "pizza-hash",
+                    200,
+                    "2024-04-01T00:00:00+00:00",
+                    "2024-04-01T00:00:00+00:00",
+                ),
             ],
         )
 
@@ -212,6 +223,20 @@ class SearchPagesTests(unittest.TestCase):
         self.assertEqual(star_response.status_code, 200)
         self.assertIn(b"No results.", slash_response.data)
         self.assertIn(b"No results.", star_response.data)
+
+    def test_search_marks_title_matches_for_title_queries(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            find_app.DB_PATH = db.name
+            find_app.app.config["TESTING"] = True
+            try:
+                response = find_app.app.test_client().get("/search?q=title:pizza")
+            finally:
+                find_app.DB_PATH = old_db_path
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"<mark>Pizza</mark> Menu", response.data)
 
 
 class CachedPageConfigTests(unittest.TestCase):
