@@ -4,7 +4,9 @@
   <meta charset="utf-8"/>
   <title>{{ title }}</title>
   <style>
-    /* @see: https://thecascade.dev/article/least-amount-of-css/ */
+    /* For Rationale 
+     * @see: https://web.archive.org/web/20241112232134/https://thecascade.dev/article/least-amount-of-css/
+     */
     html {
         color-scheme: light dark;
     }
@@ -12,7 +14,7 @@
     body {
         font-family: system-ui;
         font-size: 1.10rem;
-        line-height: 1.5;
+        line-height: 1.4;
     }
 
     img,
@@ -27,8 +29,16 @@
         margin-inline: auto;
     }
 
+    ul,ol {
+      margin-block-start: 0.2em;
+      margin-block-end:   0.2em;
+    }
+    
+    ul {
+        list-style-type: square;
+    }
 
-    .right { text-align: right; }
+    .right { text-align: right; padding-right: 1%;}
     .tip   { font-size: .92rem; }
     .muted { color: #666; font-size: .92rem; }
     mark { background: #ffef8a; }
@@ -38,19 +48,20 @@
   <img src="https://gioorgi.com/logos/vic20-anim.gif">
   <h1><a href="{{ url_for('home') }}">Find</a></h1>
   <div class="main">
-        Wellcome to Find, a small search application for all gioorgi.com sites.
-        <br>
-        Some Tips:
+        Wellcome to Find, a small search application for all gioorgi.com sites.        
+        <div class="tip">Some Tips:
         <ul>
-        <li>Use FTS queries like <a href="/search?q=sqlite+OR+postgres">sqlite OR postgres</a>,
-        <a href="/search?q=title%3Agit">title:git</a>, use double quote to search exact phrases like <a href="/search?q=title%3Agit">"title git"</a>
-        <li>Google-like <a href="/search?q=site:8bit.gioorgi.com">site:8bit.gioorgi.com syntax</a> is supported, for instance to search only on companion sites
+          <li>Use FTS queries like <a href="/search?q=sqlite+OR+postgres">sqlite OR postgres</a>,
+          <a href="/search?q=title%3Agit">title:git</a>, use double quote to search exact phrases like <a href="/search?q=title%3Agit">"title git"</a>
+          <li>Google-like <a href="/search?q=site:8bit.gioorgi.com">site:8bit.gioorgi.com syntax</a> is supported, for instance to search only on companion sites
+          <li><a href="/search?q=site:fatlama.substack.com">Fatlama, newsletter GenAI in Italiano [Italian GenAI newsletter]</a></li>
         </ul>
+        </div>
         Note: a rate limiter is active by default.
         <p>
         {% block body %}{% endblock %}
         </p>
   </div>
-  <footer class="muted right"><a href="https://github.com/daitangio/find">Find {{ find_version }}</a></footer>
+  <footer class="muted right"><a href="https://github.com/daitangio/find/tree/{{ find_version }}">Find {{ find_version }}</a></footer>
 </body>
 </html>

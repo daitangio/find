@@ -15,7 +15,11 @@ while true; do
  date
  echo ======================================================================
  # Separated for the meantime
- crawl --seed https://8bit.gioorgi.com --same-host
- crawl --seed https://gioorgi.com --same-host 
+ crawl --seed https://fatlama.substack.com  --seed https://fatlama.substack.com/p/chi-ha-paura-dellopen-source \
+    --same-host --max-pages 100
+
  sleep $(( $REINDEX_INTERVAL_HOURS * 60 * 60 ))
+ # crawl --seed https://8bit.gioorgi.com --same-host
+ crawl --seed https://gioorgi.com --same-host 
+ 
 done

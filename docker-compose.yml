@@ -6,7 +6,7 @@ services:
       SEARCH_DB: '/opt/find/search.db'
       TZ: 'Europe/Rome'
       FLASK_DEBUG: false
-      REINDEX_INTERVAL_HOURS: 8
+      REINDEX_INTERVAL_HOURS: 36
       FIND_WEB_WORKERS: 2
       FIND_SHOW_CACHED_PAGE: disabled
     ports:
