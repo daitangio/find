@@ -207,6 +207,52 @@ class SearchPagesTests(unittest.TestCase):
         self.assertIn(b"orderBy=date", response.data)
         self.assertIn(b"offset=1", response.data)
 
+    def test_search_rejects_non_integer_pagination_values(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            find_app.DB_PATH = db.name
+            find_app.app.config["TESTING"] = True
+            try:
+                limit_response = find_app.app.test_client().get(
+                    "/search?q=alpha&limit=abc"
+                )
+                offset_response = find_app.app.test_client().get(
+                    "/search?q=alpha&offset=abc"
+                )
+            finally:
+                find_app.DB_PATH = old_db_path
+
+        self.assertEqual(limit_response.status_code, 400)
+        self.assertEqual(offset_response.status_code, 400)
+
+    def test_search_rejects_out_of_range_pagination_values(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            find_app.DB_PATH = db.name
+            find_app.app.config["TESTING"] = True
+            try:
+                negative_limit_response = find_app.app.test_client().get(
+                    "/search?q=alpha&limit=-1"
+                )
+                zero_limit_response = find_app.app.test_client().get(
+                    "/search?q=alpha&limit=0"
+                )
+                high_limit_response = find_app.app.test_client().get(
+                    "/search?q=alpha&limit=51"
+                )
+                negative_offset_response = find_app.app.test_client().get(
+                    "/search?q=alpha&offset=-1"
+                )
+            finally:
+                find_app.DB_PATH = old_db_path
+
+        self.assertEqual(negative_limit_response.status_code, 400)
+        self.assertEqual(zero_limit_response.status_code, 400)
+        self.assertEqual(high_limit_response.status_code, 400)
+        self.assertEqual(negative_offset_response.status_code, 400)
+
     def test_search_handles_punctuation_only_queries(self) -> None:
         old_db_path = find_app.DB_PATH
         with tempfile.NamedTemporaryFile() as db:

@@ -49,6 +49,8 @@ limiter = Limiter(
 # -------------------------
 MAX_QUERY_LENGTH = 150
 MAX_QUERY_TERMS = 12
+DEFAULT_SEARCH_LIMIT = 10
+MAX_SEARCH_LIMIT = 50
 SEARCH_TIMEOUT_SECONDS = 1.1  # Max time for a search query
 
 # Thread pool for timeout-protected search operations (DDoS protection 3)
@@ -336,6 +338,28 @@ def _search_pages_threaded(
         conn.close()
 
 
+def _parse_int_arg(
+    name: str,
+    default: int,
+    min_value: int,
+    max_value: int | None = None,
+) -> int:
+    raw_value = request.args.get(name)
+    if raw_value is None or raw_value == "":
+        return default
+
+    try:
+        value = int(raw_value)
+    except ValueError:
+        abort(400, description=f"{name} must be an integer")
+
+    if value < min_value:
+        abort(400, description=f"{name} must be at least {min_value}")
+    if max_value is not None and value > max_value:
+        abort(400, description=f"{name} must be at most {max_value}")
+    return value
+
+
 @app.route("/search")
 @limiter.limit("20 per minute")  # Stricter limit for search endpoint
 def search():
@@ -343,12 +367,12 @@ def search():
 
     # Enforce query complexity limits
     if len(q) > MAX_QUERY_LENGTH:
-        abort(400, description="Query too long (max 200 characters)")
+        abort(400, description=f"Query too long (max {MAX_QUERY_LENGTH} characters)")
     if len(q.split()) > MAX_QUERY_TERMS:
-        abort(400, description="Too many search terms (max 10)")
+        abort(400, description=f"Too many search terms (max {MAX_QUERY_TERMS})")
 
-    limit = min(int(request.args.get("limit", 10)), 50)
-    offset = max(int(request.args.get("offset", 0)), 0)
+    limit = _parse_int_arg("limit", DEFAULT_SEARCH_LIMIT, 1, MAX_SEARCH_LIMIT)
+    offset = _parse_int_arg("offset", 0, 0)
     order_by = request.args.get("orderBy", "rank")
     if order_by not in {"rank", "date"}:
         order_by = "rank"
