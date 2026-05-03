@@ -316,13 +316,13 @@ async def fetch_html(
             # Read with size cap
             body = (
                 await resp.content.readexactly(
-                    min(max_bytes, resp.content_length or max_bytes)
+                    min(max_bytes+1, resp.content_length or max_bytes)
                 )
                 if resp.content_length and resp.content_length > 0
                 else await resp.content.read(max_bytes + 1)
             )
 
-            if len(body) > max_bytes:
+            if len(body) >= max_bytes:
                 return FetchResult(
                     url=url,
                     status=status,

@@ -82,6 +82,55 @@ class HtmlExtractionTests(unittest.TestCase):
         self.assertEqual(post_date, "2023-08-30T14:21:00+00:00")
 
 
+class FakeContent:
+    def __init__(self, body: bytes):
+        self.body = body
+
+    async def readexactly(self, size: int) -> bytes:
+        return self.body[:size]
+
+    async def read(self, size: int) -> bytes:
+        return self.body[:size]
+
+
+class FakeResponse:
+    def __init__(self, body: bytes, content_length: int):
+        self.headers = {"content-type": "text/html"}
+        self.status = 200
+        self.content_length = content_length
+        self.charset = "utf-8"
+        self.content = FakeContent(body)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, _exc_type, _exc, _tb):
+        return False
+
+
+class FakeSession:
+    def __init__(self, response: FakeResponse):
+        self.response = response
+
+    def get(self, _url: str, timeout):
+        return self.response
+
+
+class FetchHtmlTests(unittest.IsolatedAsyncioTestCase):
+    async def test_fetch_html_rejects_declared_oversized_response(self) -> None:
+        response = FakeResponse(b"<html>oversized</html>", content_length=21)
+        result = await crawl.fetch_html(
+            FakeSession(response),
+            "https://example.com/oversized",
+            timeout_s=5,
+            max_bytes=10,
+            wid=0,
+        )
+
+        self.assertEqual(result.error, "too-large")
+        self.assertIsNone(result.html)
+
+
 class CrawlPolicyTests(unittest.TestCase):
     def test_is_allowed_url_respects_host_restriction(self) -> None:
         root_host = "example.com"
