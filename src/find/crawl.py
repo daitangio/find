@@ -8,6 +8,7 @@ import time
 import urllib.robotparser
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Iterable, Optional
 from urllib.parse import urljoin, urldefrag, urlparse, urlunparse
 
@@ -199,23 +200,40 @@ def normalize_post_date(raw: str | None) -> str | None:
     return parsed.isoformat()
 
 
-def extract_post_date(soup: BeautifulSoup) -> str | None:
+def normalize_http_date(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    normalized = normalize_post_date(raw)
+    if normalized:
+        return normalized
+    try:
+        parsed = parsedate_to_datetime(raw)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.isoformat()
+
+
+def extract_post_date(
+    soup: BeautifulSoup, document_date: str | None = None
+) -> str | None:
     """
     XXX: This meta extraction is based on an heuristic you can find in a lot of sites.
     Your mileage may vary: pull request are accepted to find better solutions
     """
     meta = soup.find("div", class_="post_meta")
     if not meta:
-        return None
+        return normalize_http_date(document_date)
     post_date = meta.find(class_="post_date")
     if not post_date:
-        return None
+        return normalize_http_date(document_date)
     raw = post_date.get("datetime") or post_date.get_text(" ", strip=True)
-    return normalize_post_date(raw)
+    return normalize_post_date(raw) or normalize_http_date(document_date)
 
 
 def html_to_text_and_links(
-    base_url: str, html: str, wid: int = -1
+    base_url: str, html: str, wid: int = -1, document_date: str | None = None
 ) -> tuple[str | None, str, list[str], str | None]:
     start_time = time.perf_counter()
     soup = BeautifulSoup(html, "html.parser")
@@ -225,9 +243,9 @@ def html_to_text_and_links(
 
     title = soup.title.get_text(" ", strip=True) if soup.title else None
     text = soup.get_text(" ", strip=True)
-    post_date = extract_post_date(soup)
+    post_date = extract_post_date(soup, document_date)
     if not post_date:
-        # print(f"[{wid}] [WARN] No post date found {base_url}")
+        print(f"[{wid}] [WARN] ?No post date found {base_url}")
         pass
     links: list[str] = []
     for a in soup.find_all("a", href=True):
@@ -259,6 +277,7 @@ class FetchResult:
     content_type: str | None
     html: str | None
     error: str | None
+    document_date: str | None = None
 
 
 @dataclass
@@ -280,6 +299,7 @@ async def fetch_html(
             url, timeout=aiohttp.ClientTimeout(total=timeout_s)
         ) as resp:
             ctype = resp.headers.get("content-type")
+            document_date = resp.headers.get("last-modified")
             status = resp.status
 
             # Only accept HTML-ish content types; still allow missing ctype
@@ -290,6 +310,7 @@ async def fetch_html(
                     content_type=ctype,
                     html=None,
                     error="non-html",
+                    document_date=document_date,
                 )
 
             # Read with size cap
@@ -308,13 +329,19 @@ async def fetch_html(
                     content_type=ctype,
                     html=None,
                     error="too-large",
+                    document_date=document_date,
                 )
 
             # Best-effort decode
             html = body.decode(resp.charset or "utf-8", errors="replace")
             log_perf_if_slow(wid, f"Fetch {url}", start_time)
             return FetchResult(
-                url=url, status=status, content_type=ctype, html=html, error=None
+                url=url,
+                status=status,
+                content_type=ctype,
+                html=html,
+                error=None,
+                document_date=document_date,
             )
     except asyncio.TimeoutError:
         return FetchResult(
@@ -646,7 +673,7 @@ class Crawler:
                         print(f"[{wid}] [WARN] skip {url} ({fr.status} / {fr.error})")
                     continue
                 title, text, links, post_date = html_to_text_and_links(
-                    url, fr.html, wid
+                    url, fr.html, wid, fr.document_date
                 )
 
                 # enqueue a DB job (this may backpressure if DB is slower)

@@ -19,6 +19,7 @@ Find is composed of two commands:
 - de-duplication if content is the same for some pages.
 - Respects robots.txt
 - Sort by relevance or date
+- Date are read from the document if found, or by the web server header
 
 (Back link ranking tuning is in progress)
 

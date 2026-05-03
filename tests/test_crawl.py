@@ -66,6 +66,21 @@ class HtmlExtractionTests(unittest.TestCase):
         )
         self.assertEqual(post_date, "2023-08-30T00:00:00+00:00")
 
+    def test_html_to_text_and_links_uses_document_date_fallback(self) -> None:
+        html = """
+        <html>
+          <body>
+            <p>No visible publication date</p>
+          </body>
+        </html>
+        """
+        _title, _text, _links, post_date = crawl.html_to_text_and_links(
+            "https://example.com/base",
+            html,
+            document_date="Wed, 30 Aug 2023 14:21:00 GMT",
+        )
+        self.assertEqual(post_date, "2023-08-30T14:21:00+00:00")
+
 
 class CrawlPolicyTests(unittest.TestCase):
     def test_is_allowed_url_respects_host_restriction(self) -> None:

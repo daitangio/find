@@ -22,5 +22,9 @@ COPY README.md .
 RUN pip install --no-cache-dir -e .
 
 RUN python3 -m unittest discover -s tests
+
+# RUN pip install pylint
+# RUN pylint $(git ls-files '*.py')
+
 COPY initAndFind.sh .
 CMD ["./initAndFind.sh"]
