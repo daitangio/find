@@ -665,7 +665,9 @@ class Crawler:
                     wid=wid,
                 )
                 fetch_elapsed_ms = (time.perf_counter() - fetch_start) * 1000
-                if fr.status in (404, 302):
+                # Accept only 200 messages
+                if fr.status !=200:
+                #if fr.status in (404, 302):
                     print(f"[{wid}] [WARN] Dead link/proxy {url} ({fr.status})")
                     continue
                 if fr.html is None:
