@@ -12,6 +12,7 @@ import find.app as find_app
 from find.app import (
     extract_meta_refresh,
     find_format_date,
+    nice_score,
     parse_search_query,
     search_pages,
 )
@@ -161,6 +162,54 @@ class FindFormatDateTests(unittest.TestCase):
 
 
 class SearchPagesTests(unittest.TestCase):
+    def test_search_pages_weights_title_matches_above_text_matches(self) -> None:
+        with tempfile.NamedTemporaryFile() as db:
+            schema_path = os.path.join(ROOT, "src", "find", "schema.sql")
+            with sqlite3.connect(db.name) as conn:
+                with open(schema_path, encoding="utf-8") as schema:
+                    conn.executescript(schema.read())
+                conn.executemany(
+                    """
+                    INSERT INTO pages (
+                        id, url, title, html, text, content_hash, status_code, fetched_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    [
+                        (
+                            1,
+                            "https://example.com/text",
+                            "Reference",
+                            "<p>sqlite docs</p>",
+                            "sqlite docs",
+                            "text-hash",
+                            200,
+                            "2024-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            2,
+                            "https://example.com/title",
+                            "SQLite",
+                            "<p>reference docs</p>",
+                            "reference docs",
+                            "title-hash",
+                            200,
+                            "2024-01-01T00:00:00+00:00",
+                        ),
+                    ],
+                )
+                conn.row_factory = sqlite3.Row
+                results, total = search_pages(conn, "sqlite")
+
+        self.assertEqual(total, 2)
+        self.assertEqual([result.title for result in results], ["SQLite", "Reference"])
+        self.assertIn("<mark>SQLite</mark>", results[0].snippet)
+
+    def test_nice_score_keeps_tiny_matches_nonzero(self) -> None:
+        self.assertEqual(nice_score(-0.00000001), 
+                                     0.0000001)
+        #self.assertEqual(nice_score(-0.000000000001), 0.0)
+
     def test_search_pages_can_order_by_date(self) -> None:
         with tempfile.NamedTemporaryFile() as db:
             create_search_db(db.name)

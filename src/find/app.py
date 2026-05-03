@@ -53,6 +53,12 @@ DEFAULT_SEARCH_LIMIT = 10
 MAX_SEARCH_LIMIT = 50
 SEARCH_TIMEOUT_SECONDS = 1.1  # Max time for a search query
 
+# GG Set up weights
+BM25_TITLE_WEIGHT = 5.0
+BM25_TEXT_WEIGHT = 1.0
+BM25_URL_WEIGHT = 2.5
+
+
 # Thread pool for timeout-protected search operations (DDoS protection 3)
 _search_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="search")
 # Unused for the meantime
@@ -216,7 +222,8 @@ def search_pages(
     if order_by == "date":
         order_clause = "p.post_date IS NULL ASC, p.post_date DESC, score ASC"
 
-    # GG: We use snippet with -1 to be sure the system select the right field (which could also be the title)    
+    # Use the same FTS columns for snippets and BM25, but weight title matches higher
+    # because they are usually stronger relevance signals than body or URL matches.
     rows = conn.execute(
         f"""
         WITH inbound AS (
@@ -229,8 +236,8 @@ def search_pages(
           p.id,
           p.url,
           p.title,
-          snippet(pages_fts, -1, '<mark>', '</mark>', ' … ', 12) AS snippet,          
-          bm25(pages_fts) as score,
+          snippet(pages_fts, -1, '<mark>', '</mark>', ' … ', 12) AS snippet,
+          bm25(pages_fts, ?, ?, ?) as score,
           p.status_code,
           p.post_date
         FROM pages_fts
@@ -240,7 +247,14 @@ def search_pages(
         ORDER BY {order_clause}
         LIMIT ? OFFSET ?;
         """,
-        (query, limit, offset),
+        (
+            BM25_TITLE_WEIGHT,
+            BM25_TEXT_WEIGHT,
+            BM25_URL_WEIGHT,
+            query,
+            limit,
+            offset,
+        ),
     ).fetchall()
 
     results = []
@@ -261,13 +275,19 @@ def search_pages(
                 url=r["url"],
                 title=page_title,
                 snippet=r["snippet"] or "",
-                rank=int(math.floor(10 * -1 * score)),
+                rank=nice_score(score),
                 status_code=int(r["status_code"]),
                 post_date=r["post_date"],
             )
         )
     return results, int(total)
 
+
+def nice_score(bmscore: float) -> float:
+    """
+     GG We want a limited rank value
+    """
+    return float(round(10 * -1 * bmscore,8))    
 
 # -------------------------
 # Routes
