@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import math
 import os
 import sqlite3
 
@@ -61,7 +60,7 @@ BM25_URL_WEIGHT = 2.5
 
 # Link boost weights
 LINK_BOOST_WEIGHT = float(os.environ.get("LINK_BOOST_WEIGHT", "0.05"))
-LINK_BOOST_CAP =    int(os.environ.get("LINK_BOOST_CAP", "20"))
+LINK_BOOST_CAP = int(os.environ.get("LINK_BOOST_CAP", "20"))
 
 
 # Thread pool for timeout-protected search operations (DDoS protection 3)
@@ -255,10 +254,8 @@ def search_pages(
             BM25_TITLE_WEIGHT,
             BM25_TEXT_WEIGHT,
             BM25_URL_WEIGHT,
-
             LINK_BOOST_WEIGHT,
             LINK_BOOST_CAP,
-
             query,
             limit,
             offset,
@@ -293,9 +290,10 @@ def search_pages(
 
 def nice_score(bmscore: float) -> float:
     """
-     GG We want a limited rank value
+    GG We want a limited rank value
     """
-    return float(round(10 * -1 * bmscore,8))    
+    return float(round(10 * -1 * bmscore, 8))
+
 
 # -------------------------
 # Routes

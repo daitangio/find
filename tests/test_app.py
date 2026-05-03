@@ -202,14 +202,15 @@ class SearchPagesTests(unittest.TestCase):
                 results, total = search_pages(conn, "sqlite")
 
         self.assertEqual(total, 2)
-        #print(results)
-        self.assertEqual([result.title for result in results], ["SQLite", "Reference"], results)
+        # print(results)
+        self.assertEqual(
+            [result.title for result in results], ["SQLite", "Reference"], results
+        )
         self.assertIn("<mark>SQLite</mark>", results[0].snippet)
 
     def test_nice_score_keeps_tiny_matches_nonzero(self) -> None:
-        self.assertEqual(nice_score(-0.00000001), 
-                                     0.0000001)
-        #self.assertEqual(nice_score(-0.000000000001), 0.0)
+        self.assertEqual(nice_score(-0.00000001), 0.0000001)
+        # self.assertEqual(nice_score(-0.000000000001), 0.0)
 
     def test_search_pages_can_order_by_date(self) -> None:
         with tempfile.NamedTemporaryFile() as db:
