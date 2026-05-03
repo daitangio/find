@@ -202,7 +202,8 @@ class SearchPagesTests(unittest.TestCase):
                 results, total = search_pages(conn, "sqlite")
 
         self.assertEqual(total, 2)
-        self.assertEqual([result.title for result in results], ["SQLite", "Reference"])
+        #print(results)
+        self.assertEqual([result.title for result in results], ["SQLite", "Reference"], results)
         self.assertIn("<mark>SQLite</mark>", results[0].snippet)
 
     def test_nice_score_keeps_tiny_matches_nonzero(self) -> None:

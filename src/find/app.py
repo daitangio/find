@@ -54,16 +54,19 @@ MAX_SEARCH_LIMIT = 50
 SEARCH_TIMEOUT_SECONDS = 1.1  # Max time for a search query
 
 # GG Set up weights
+
 BM25_TITLE_WEIGHT = 5.0
 BM25_TEXT_WEIGHT = 1.0
 BM25_URL_WEIGHT = 2.5
+
+# Link boost weights
+LINK_BOOST_WEIGHT = float(os.environ.get("LINK_BOOST_WEIGHT", "0.05"))
+LINK_BOOST_CAP =    int(os.environ.get("LINK_BOOST_CAP", "20"))
 
 
 # Thread pool for timeout-protected search operations (DDoS protection 3)
 _search_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="search")
 # Unused for the meantime
-# LINK_BOOST_WEIGHT = float(os.environ.get("LINK_BOOST_WEIGHT", "0.05"))
-# LINK_BOOST_CAP = int(os.environ.get("LINK_BOOST_CAP", "20"))
 
 ###########################################################
 
@@ -205,12 +208,9 @@ def search_pages(
 ) -> tuple[list[SearchResult], int]:
     """
     Uses FTS5 with bm25 ranking, inbound-link boost, and snippet generation.
-    GG: New boost score function need to be studied because added value is unclear
 
-    bm25(pages_fts) * (
-            1.0 + (? * MIN(COALESCE(inbound.inbound, 0), ?))
-          ) AS score,
-          + LINK_BOOST_WEIGHT, LINK_BOOST_CAP
+    GG the new score uses a minimla link back
+
     """
     # Count total hits
     total = conn.execute(
@@ -237,7 +237,11 @@ def search_pages(
           p.url,
           p.title,
           snippet(pages_fts, -1, '<mark>', '</mark>', ' … ', 12) AS snippet,
-          bm25(pages_fts, ?, ?, ?) as score,
+          bm25(pages_fts, ?, ?, ?) * (
+            1.0 + (? * MIN(COALESCE(inbound.inbound, 0), ?))
+          ) AS score,
+          
+
           p.status_code,
           p.post_date
         FROM pages_fts
@@ -251,6 +255,10 @@ def search_pages(
             BM25_TITLE_WEIGHT,
             BM25_TEXT_WEIGHT,
             BM25_URL_WEIGHT,
+
+            LINK_BOOST_WEIGHT,
+            LINK_BOOST_CAP,
+
             query,
             limit,
             offset,

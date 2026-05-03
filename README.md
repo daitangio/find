@@ -66,6 +66,8 @@ The project accepts pull requests: please open it adding a comment. Ensure the c
 
 [SQLite has a full text search capability called FTS5](https://sqlite.org/fts5.html) which offers out of the box also stemming for english language.
 
+Upon ChatGPT suggestion we added a simple inbound-link-count score boost in version 0.0.6.
+
 ChatGPT for the crawler proposed asyncio I/O (aiohttp & aiosqlite libraries), which is a very good approach to scale the crawler: downloading web pages is a very I/O bound activity and it benefits from a non-blocking library.
 
 Initial implementation has a locking problem: we solved it with a mono-writer database task. 
