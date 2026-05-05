@@ -14,12 +14,20 @@ USER app
 WORKDIR /home/app
 
 COPY LICENSE .
-COPY src src
-COPY tests tests
+
 COPY pyproject.toml .
+
+# GG Codex suggestion to extract requirements to cache them before real install 
+# You can comment this 2 lines if you want a more "standard" - unoptimized procedure
+RUN python -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print('\n'.join(p['project']['dependencies']))" > requirements.txt
+RUN pip install --user -r requirements.txt
+# RUN ls /home/app/.cache/
+
+COPY tests tests
+COPY src src
 COPY README.md .
 
-RUN pip install --no-cache-dir -e .
+RUN pip install -e .
 
 RUN python3 -m unittest discover -s tests
 

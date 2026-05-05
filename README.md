@@ -84,29 +84,10 @@ The overall project aims to be very compact (*less is more* mantra)
 ### reindex
 The reindex command can be used to re-index the database
 
-# Change Log
+# Links
 
-# 0.0.3-TO BE
-
-- Better handling of search queries
-
-# 0.0.2 Rate Limit
-
-This version features:
-
-- reindex
-- robots.txt specification implementation
-- flask rate limiter and minimal DDoS protection: https://flask-limiter.readthedocs.io/en/stable/
-- bugfix on slow sites (>1 second response time)
- 
-# 0.0.1 First implementation
-
-- Search + index core
-- docker compose
-
-# Next Step and Roadmap
-
-1) The links table is collected but not used on the search right now. The idea is to use it to refine the PageRank. To have an idea try:
+The links table is collected and used from version 0.0.6.
+   Example query:
 
     ```sql
     SELECT p.url, COUNT(*) AS out_links
@@ -115,8 +96,11 @@ This version features:
     ORDER BY out_links DESC
     LIMIT 20;
     ```
+
+# Next Step and Roadmap
+
     
-2) Ability to classify categories and tags on the full text search can be useful for faceting and classification.
+1) Ability to classify categories and tags on the full text search can be useful for faceting and classification.
 "Auto discovery" of the taxonomies can be further idea
 
 ## Docker compose and auto-index mode

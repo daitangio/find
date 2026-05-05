@@ -10,6 +10,7 @@
 - No sycophantic openers or closing fluff.
 - Keep solutions simple and direct.
 
+The overall project aims to be very compact (*less is more* mantra)
 
 ## Project Summary
 
