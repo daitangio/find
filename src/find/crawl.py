@@ -232,10 +232,18 @@ def extract_post_date(
     return normalize_post_date(raw) or normalize_http_date(document_date)
 
 
+def remove_nav_content(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    for nav in soup.find_all("nav"):
+        nav.clear()
+    return str(soup)
+
+
 def html_to_text_and_links(
     base_url: str, html: str, wid: int = -1, document_date: str | None = None
 ) -> tuple[str | None, str, list[str], str | None]:
     start_time = time.perf_counter()
+    html = remove_nav_content(html)
     soup = BeautifulSoup(html, "html.parser")
 
     for tag in soup(["script", "style", "noscript"]):
@@ -674,6 +682,7 @@ class Crawler:
                     if fr.error != "non-html":
                         print(f"[{wid}] [WARN] skip {url} ({fr.status} / {fr.error})")
                     continue
+                fr.html = remove_nav_content(fr.html)
                 title, text, links, post_date = html_to_text_and_links(
                     url, fr.html, wid, fr.document_date
                 )

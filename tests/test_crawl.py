@@ -81,6 +81,48 @@ class HtmlExtractionTests(unittest.TestCase):
         )
         self.assertEqual(post_date, "2023-08-30T14:21:00+00:00")
 
+    def test_remove_nav_content_clears_nav_elements(self) -> None:
+        html = """
+        <html>
+          <body>
+            <nav><a href="/menu">Menu</a><span>Navigation</span></nav>
+            <main><p>Article body</p></main>
+          </body>
+        </html>
+        """
+        cleaned = crawl.remove_nav_content(html)
+
+        self.assertIn("<nav></nav>", cleaned)
+        self.assertNotIn("Menu", cleaned)
+        self.assertNotIn("Navigation", cleaned)
+        self.assertIn("Article body", cleaned)
+
+    def test_html_to_text_and_links_ignores_nav_content_and_links(self) -> None:
+        html = """
+        <html>
+          <head><title>Example Title</title></head>
+          <body>
+            <nav>
+              <a href="/nav">Nav Link</a>
+              <span>Navigation copy</span>
+            </nav>
+            <main>
+              <p>Article body</p>
+              <a href="/article">Article Link</a>
+            </main>
+          </body>
+        </html>
+        """
+        title, text, links, _post_date = crawl.html_to_text_and_links(
+            "https://example.com/base", html
+        )
+
+        self.assertEqual(title, "Example Title")
+        self.assertNotIn("Nav Link", text)
+        self.assertNotIn("Navigation copy", text)
+        self.assertIn("Article body", text)
+        self.assertEqual(links, ["https://example.com/article"])
+
 
 class FakeContent:
     def __init__(self, body: bytes):

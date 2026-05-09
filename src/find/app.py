@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os
+import os,logging
 import sqlite3
 
 from dataclasses import dataclass
@@ -22,7 +22,7 @@ FIND_SHOW_CACHED_PAGE = "FIND_SHOW_CACHED_PAGE"
 
 
 app = Flask(__name__)
-
+web_logger=logging.getLogger('gunicorn.error')
 
 @app.context_processor
 def inject_find_config() -> dict[str, str | bool]:
@@ -409,6 +409,7 @@ def search():
     # Transform site:something queries to url:"something"
     fts_query = parse_search_query(q)
 
+    web_logger.info(f"Searching {fts_query}")
     # Execute search with timeout protection (thread-safe)
     try:
         future = _search_executor.submit(
