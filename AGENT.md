@@ -10,6 +10,7 @@
 - No sycophantic openers or closing fluff.
 - Keep solutions simple and direct.
 
+- At the end of this file, create a work in progress log, where you note what you already did, what is missing. Always update this log.
 The overall project aims to be very compact (*less is more* mantra)
 
 ## Project Summary
@@ -92,7 +93,7 @@ Crawler behavior:
 - Fetches robots.txt per origin through `utils.get_robots_parser` and caches parsers.
 - Uses `Find/{version} (+https://github.com/daitangio/find)` as User-Agent.
 - Skips non-HTML and oversized pages.
-- Currently skips `404` and `302` responses before indexing.
+- Indexes only `200` responses; non-`200` responses are skipped before indexing.
 - Stores a new page version only when the HTML content hash changes.
 
 Typical crawl command:
@@ -142,6 +143,7 @@ The test suite is under `tests/`:
 
 - `test_app.py`: search query parsing, date formatting, search ordering, cached page feature flag, template version rendering.
 - `test_crawl.py`: URL normalization, HTML extraction, post date extraction, host restriction, concurrency auto-tuning.
+- `test_page_ranking.py`: inbound-link boost behavior, cap handling, and BM25 title weighting.
 - `test_robots.py`: robots.txt fetching, parsing, cache behavior, and common status handling.
 
 Run tests:
@@ -176,7 +178,7 @@ Docker:
 - Image base: `python:3.14-slim-trixie`
 - App runs as non-root `app`.
 - `initAndFind.sh` is the container command.
-- Compose maps host port `49152` to container port `7001`.
+- Compose maps host port `7001` to container port `7001`.
 - Compose uses `SEARCH_DB=/opt/find/search.db`, `FIND_WEB_WORKERS=2`, `REINDEX_INTERVAL_HOURS=36`, and `FIND_SHOW_CACHED_PAGE=disabled`.
 - Persistent data is mounted from `$FIND_HOME` to `/opt/find`.
 
@@ -192,5 +194,12 @@ FLASK_DEBUG=true findgui
 
 - SQLite FTS5 with the Porter tokenizer is best suited to English text.
 - The crawler indexes static HTML only; it does not execute JavaScript.
-- Link graph data is collected, but search ranking currently uses BM25 plus date sorting, not PageRank.
+- Search ranking combines BM25 with an inbound-link boost and date sorting; it is not full PageRank.
 - Cached page display intentionally renders stored HTML when enabled, so treat it as a feature with an explicit trust boundary.
+
+## Work In Progress Log
+
+- 2026-05-28: Read `AGENT.md` and verified constraints.
+- 2026-05-28: Added this `Work In Progress Log` section at end of file, as required.
+- 2026-05-28: Synced documentation to code: crawler response policy, Docker compose port mapping, tests list, and ranking notes.
+- 2026-05-28: Missing: re-check this document whenever runtime behavior or configuration changes.
