@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import find.app as find_app
 from find.app import (
+    count_crawled_urls_by_domain,
     extract_meta_refresh,
     find_format_date,
     nice_score,
@@ -162,6 +163,71 @@ class FindFormatDateTests(unittest.TestCase):
 
 
 class SearchPagesTests(unittest.TestCase):
+    def test_count_crawled_urls_by_domain_groups_by_url_origin(self) -> None:
+        with tempfile.NamedTemporaryFile() as db:
+            schema_path = os.path.join(ROOT, "src", "find", "schema.sql")
+            with sqlite3.connect(db.name) as conn:
+                with open(schema_path, encoding="utf-8") as schema:
+                    conn.executescript(schema.read())
+                conn.executemany(
+                    """
+                    INSERT INTO pages (
+                        url, title, html, text, content_hash, status_code, fetched_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    [
+                        (
+                            "https://othersite.com/page",
+                            "Other",
+                            "<p>other</p>",
+                            "other",
+                            "other-hash",
+                            200,
+                            "2024-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            "https://gioorgi.com/one",
+                            "One",
+                            "<p>one</p>",
+                            "one",
+                            "one-hash",
+                            200,
+                            "2024-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            "https://gioorgi.com/two",
+                            "Two",
+                            "<p>two</p>",
+                            "two",
+                            "two-hash",
+                            200,
+                            "2024-01-01T00:00:00+00:00",
+                        ),
+                        (
+                            "http://gioorgi.com/insecure",
+                            "Insecure",
+                            "<p>insecure</p>",
+                            "insecure",
+                            "insecure-hash",
+                            200,
+                            "2024-01-01T00:00:00+00:00",
+                        ),
+                    ],
+                )
+                conn.row_factory = sqlite3.Row
+
+                counts = count_crawled_urls_by_domain(conn)
+
+        self.assertEqual(
+            counts,
+            [
+                ("http://gioorgi.com", 1),
+                ("https://gioorgi.com", 2),
+                ("https://othersite.com", 1),
+            ],
+        )
+
     def test_search_pages_weights_title_matches_above_text_matches(self) -> None:
         with tempfile.NamedTemporaryFile() as db:
             schema_path = os.path.join(ROOT, "src", "find", "schema.sql")

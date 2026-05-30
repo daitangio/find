@@ -25,8 +25,8 @@ from .utils import (
 
 DEFAULT_UA = f"Find/{get_version()} (+https://github.com/daitangio/find)"
 
-# Basic value tuned
-PERF_THRESHOLD_MS = float(2000)
+# Basic value
+PERF_THRESHOLD_MS = float(300)
 
 
 def log_perf_if_slow(
@@ -266,7 +266,7 @@ def html_to_text_and_links(
             links.append(norm)
 
     log_perf_if_slow(
-        wid, f"Parse HTML {base_url}", start_time, 30, f", {len(links)} links"
+        wid, f"Parse HTML {base_url}", start_time, 1, f", {len(links)} links"
     )
     return title, text, dedupe_in_order(links), post_date
 
@@ -470,7 +470,7 @@ class Crawler:
                         "db_writer",
                         f"DB write for {job.fetch_result.url}",
                         db_start,
-                        10,
+                        1
                     )
                     self.writer_counter = self.writer_counter + 1
                 finally:

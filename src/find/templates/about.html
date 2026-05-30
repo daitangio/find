@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block body %}
+<ul>
+{% for dc in domain_count %}
+<li>
+  <a href="/search?q=site%3A{{ dc[0] }}">{{ dc[0] }}</a> Page Scanned so far: {{ dc[1] }}</li>
+{% endfor %}
+</ul>
+
+{% endblock %}

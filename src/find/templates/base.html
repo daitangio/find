@@ -46,9 +46,9 @@
 </head>
 <body>
   <img src="https://gioorgi.com/logos/vic20-anim.gif">
-  <h1><a href="{{ url_for('home') }}">Find</a></h1>
+  <h1><a href="{{ url_for('home') }}">Find</a> {{ title}} </h1>
   <div class="main">
-        Wellcome to Find, a small search application for all gioorgi.com sites.        
+        <a href="/about">Well come to Find</a>, a small search application for all gioorgi.com sites.        
         <div class="tip">Some Tips:
         <ul>
           <li>Use FTS queries like <a href="/search?q=sqlite+OR+postgres">sqlite OR postgres</a>,

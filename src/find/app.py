@@ -292,15 +292,48 @@ def nice_score(bmscore: float) -> float:
     """
     GG We want a limited rank value
     """
-    return float(round(10 * -1 * bmscore, 8))
+    return float(round(10 * -1 * bmscore, 2))
 
 
-# -------------------------
-# Routes
-# -------------------------
-@app.route("/")
-def home():
-    return render_template("home.html", title="Home")
+def count_crawled_urls_by_domain(conn: sqlite3.Connection) -> list[tuple[str, int]]:
+    """Return crawled URL counts grouped by URL origin, ordered by origin."""
+    rows = conn.execute(
+        """
+        WITH parsed AS (
+          SELECT
+            url,
+            instr(url, '://') AS scheme_separator
+          FROM pages
+        ),
+        origins AS (
+          SELECT
+            CASE
+              WHEN scheme_separator = 0 THEN url
+              ELSE
+                substr(url, 1, scheme_separator + 2) ||
+                CASE
+                  WHEN instr(substr(url, scheme_separator + 3), '/') = 0 THEN
+                    substr(url, scheme_separator + 3)
+                  ELSE
+                    substr(
+                      substr(url, scheme_separator + 3),
+                      1,
+                      instr(substr(url, scheme_separator + 3), '/') - 1
+                    )
+                END
+            END AS origin
+          FROM parsed
+        )
+        SELECT origin, COUNT(*) AS url_count
+        FROM origins
+        GROUP BY origin
+        ORDER BY 2 desc;
+        """
+    ).fetchall()
+
+    return [(row[0], int(row[1])) for row in rows]
+
+
 
 
 _FTS_COLUMNS = {"title", "text", "url"}
@@ -384,6 +417,19 @@ def _parse_int_arg(
     if max_value is not None and value > max_value:
         abort(400, description=f"{name} must be at most {max_value}")
     return value
+
+# -------------------------
+# Routes
+# -------------------------
+@app.route("/")
+def home():
+    return render_template("home.html", title="")
+
+@app.route("/about")
+def about():
+    conn = get_db()
+    domain_count=count_crawled_urls_by_domain(conn)
+    return render_template("about.html", title="About", domain_count=domain_count)
 
 
 @app.route("/search")
