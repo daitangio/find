@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import unittest
 
@@ -182,6 +183,35 @@ class CrawlPolicyTests(unittest.TestCase):
         self.assertFalse(
             crawl.is_allowed_url("https://other.com/page", [root_host], True)
         )
+
+    def test_is_allowed_url_respects_include_pattern(self) -> None:
+        root_host = "example.com"
+        include_pattern = re.compile(r"/blog/")
+
+        self.assertTrue(
+            crawl.is_allowed_url(
+                "https://example.com/blog/post", [root_host], True, include_pattern
+            )
+        )
+        self.assertFalse(
+            crawl.is_allowed_url(
+                "https://example.com/about", [root_host], True, include_pattern
+            )
+        )
+
+    def test_crawler_rejects_invalid_include_pattern(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Invalid include pattern"):
+            crawl.Crawler(
+                db_path=":memory:",
+                seeds=("https://example.com/",),
+                max_pages=1,
+                concurrency=2,
+                timeout_s=1,
+                max_bytes=1000,
+                restrict_same_host=True,
+                delay_s=0,
+                include_pattern="[",
+            )
 
 
 class ConcurrencyTests(unittest.TestCase):

@@ -89,6 +89,7 @@ Important functions in `crawl.py`:
 Crawler behavior:
 
 - Defaults to same-host crawling.
+- `--include-pattern` restricts the crawl frontier to URLs matching a Python regular expression.
 - Uses a shared politeness delay across workers, default `0.190` seconds.
 - Fetches robots.txt per origin through `utils.get_robots_parser` and caches parsers.
 - Uses `Find/{version} (+https://github.com/daitangio/find)` as User-Agent.
@@ -203,3 +204,4 @@ FLASK_DEBUG=true findgui
 - 2026-05-28: Added this `Work In Progress Log` section at end of file, as required.
 - 2026-05-28: Synced documentation to code: crawler response policy, Docker compose port mapping, tests list, and ranking notes.
 - 2026-05-28: Missing: re-check this document whenever runtime behavior or configuration changes.
+- 2026-05-31: Added crawler `--include-pattern` note; missing: re-check after future crawler option changes.

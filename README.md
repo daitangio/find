@@ -37,12 +37,11 @@ Create a virtualenv and install the project:
 
 Run your first crawl:
 
-    crawl --seed https://myhost.com --same-host 
+  crawl --seed https://myhost.com --same-host
 
 Run the web interface with:
 
-    FLASK_DEBUG=true findgui
-
+  FLASK_DEBUG=true findgui
 
 ## Why
 
@@ -53,6 +52,10 @@ Initial prompt was
 > The search must be performed on a SQLite database using
 > the SQLite Full Text Search (FTS5) extension.
 > Design the database model to be able to store simple html web pages.
+
+## Features
+
+You can add a include-pattern regular expression, to filter only some URLs (very nice to catch just subparts of a site)
 
 ### Design principles
 

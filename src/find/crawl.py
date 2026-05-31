@@ -112,9 +112,14 @@ def auto_tune_concurrency(delay_s: float) -> int:
 
 
 def is_allowed_url(
-    url: str, root_host_list: list[str], restrict_same_host: bool
+    url: str,
+    root_host_list: list[str],
+    restrict_same_host: bool,
+    include_pattern: re.Pattern[str] | None = None,
 ) -> bool:
     if not url:
+        return False
+    if include_pattern and not include_pattern.search(url):
         return False
     if restrict_same_host:
         current_url = urlparse(url).netloc.lower()
@@ -324,7 +329,7 @@ async def fetch_html(
             # Read with size cap
             body = (
                 await resp.content.readexactly(
-                    min(max_bytes+1, resp.content_length or max_bytes)
+                    min(max_bytes + 1, resp.content_length or max_bytes)
                 )
                 if resp.content_length and resp.content_length > 0
                 else await resp.content.read(max_bytes + 1)
@@ -392,6 +397,7 @@ class Crawler:
         max_bytes: int,
         restrict_same_host: bool,
         delay_s: float,
+        include_pattern: str | None = None,
     ):
         self.db_path = db_path
         self.seeds = normalize_seeds(seeds)
@@ -414,6 +420,12 @@ class Crawler:
         self.max_bytes = max_bytes
         self.restrict_same_host = restrict_same_host
         self.delay_s = delay_s
+        try:
+            self.include_pattern = (
+                re.compile(include_pattern) if include_pattern else None
+            )
+        except re.error as exc:
+            raise ValueError(f"Invalid include pattern: {exc}") from exc
 
         self.root_host_list = self.init_root_host_by_seeds()
         self.q: asyncio.Queue[str] = asyncio.Queue()
@@ -434,7 +446,12 @@ class Crawler:
         return [urlparse(s).netloc.lower() for s in self.seeds]
 
     def allowed(self, url: str) -> bool:
-        return is_allowed_url(url, self.root_host_list, self.restrict_same_host)
+        return is_allowed_url(
+            url,
+            self.root_host_list,
+            self.restrict_same_host,
+            self.include_pattern,
+        )
 
     async def db_writer(self) -> None:
         """
@@ -467,10 +484,7 @@ class Crawler:
                     # Commit per page (safe). You can batch later.
                     await db.commit()
                     log_perf_if_slow(
-                        "db_writer",
-                        f"DB write for {job.fetch_result.url}",
-                        db_start,
-                        1
+                        "db_writer", f"DB write for {job.fetch_result.url}", db_start, 1
                     )
                     self.writer_counter = self.writer_counter + 1
                 finally:
@@ -674,8 +688,8 @@ class Crawler:
                 )
                 fetch_elapsed_ms = (time.perf_counter() - fetch_start) * 1000
                 # Accept only 200 messages
-                if fr.status !=200:
-                #if fr.status in (404, 302):
+                if fr.status != 200:
+                    # if fr.status in (404, 302):
                     print(f"[{wid}] [WARN] Dead link/proxy {url} ({fr.status})")
                     continue
                 if fr.html is None:
@@ -814,6 +828,11 @@ async def main_async(crawler: Crawler) -> None:
 @click.option("--timeout", type=int, default=5, help="Request timeout in seconds")
 @click.option("--max-bytes", type=int, default=2_000_000, help="Max bytes per page")
 @click.option(
+    "--include-pattern",
+    default=None,
+    help="Only crawl and index URLs matching this regular expression",
+)
+@click.option(
     "--same-host/--no-same-host",
     is_flag=True,
     default=True,
@@ -827,17 +846,22 @@ def crawl_init(
     concurrency: int,
     timeout: int,
     max_bytes: int,
+    include_pattern: str | None,
     same_host: bool,
 ) -> None:
     ensure_database_present(db)
-    crawler = Crawler(
-        db_path=db,
-        seeds=seed,
-        max_pages=max_pages,
-        concurrency=concurrency,
-        timeout_s=timeout,
-        max_bytes=max_bytes,
-        restrict_same_host=same_host,
-        delay_s=delay,
-    )
+    try:
+        crawler = Crawler(
+            db_path=db,
+            seeds=seed,
+            max_pages=max_pages,
+            concurrency=concurrency,
+            timeout_s=timeout,
+            max_bytes=max_bytes,
+            restrict_same_host=same_host,
+            delay_s=delay,
+            include_pattern=include_pattern,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     asyncio.run(main_async(crawler))
