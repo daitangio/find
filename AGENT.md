@@ -179,7 +179,7 @@ Docker:
 - Image base: `python:3.14-slim-trixie`
 - App runs as non-root `app`.
 - `initAndFind.sh` is the container command.
-- Compose maps host port `7001` to container port `7001`.
+- Compose maps host port `49152` to container port `7001`.
 - Compose uses `SEARCH_DB=/opt/find/search.db`, `FIND_WEB_WORKERS=2`, `REINDEX_INTERVAL_HOURS=36`, and `FIND_SHOW_CACHED_PAGE=disabled`.
 - Persistent data is mounted from `$FIND_HOME` to `/opt/find`.
 
@@ -203,5 +203,6 @@ FLASK_DEBUG=true findgui
 - 2026-05-28: Read `AGENT.md` and verified constraints.
 - 2026-05-28: Added this `Work In Progress Log` section at end of file, as required.
 - 2026-05-28: Synced documentation to code: crawler response policy, Docker compose port mapping, tests list, and ranking notes.
+- 2026-05-28: Corrected Docker compose host port mapping to `49152:7001` after re-validation.
 - 2026-05-28: Missing: re-check this document whenever runtime behavior or configuration changes.
 - 2026-05-31: Added crawler `--include-pattern` note; missing: re-check after future crawler option changes.
