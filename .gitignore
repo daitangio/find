@@ -6,3 +6,5 @@ __pycache__/
 *.py[codz]
 *$py.class
 *deploy*.sh
+.agents/skills/screenshot
+doc/

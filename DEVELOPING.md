@@ -17,3 +17,15 @@ Install on Install your virtualenv with
 To just populate a throw-away database:
 
 FIND_HOME=/tmp docker compose up --build
+
+## AI Tips
+
+To check token usage use something like
+
+    npx ccusage 
+
+## Caveman skills
+
+To install caveman we used
+
+    npx skills add JuliusBrussee/caveman -a codex
