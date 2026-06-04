@@ -31,6 +31,10 @@
         {% if formatted_post_date %}
           <dx class="muted">{{ formatted_post_date }}</dx>
         {% endif %}</a>
+        {% set formatted_indexed_at = r.indexed_at|find_format_date %}
+        {% if formatted_indexed_at %}
+        <div class="muted">Indexed {{ formatted_indexed_at }}</div>
+        {% endif %}
         {% if find_show_cached_page and r.url %}
         <div class="muted"><a href="{{ url_for('page', page_id=r.id) }}" title="Cached {{ ("Page #" ~ r.id) }}">[Cached version]</a></div>
         {% endif %}

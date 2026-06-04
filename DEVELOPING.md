@@ -29,3 +29,5 @@ To check token usage use something like
 To install caveman we used
 
     npx skills add JuliusBrussee/caveman -a codex
+    # Also install rtk command to further reduce token usage
+    brew install rtk    

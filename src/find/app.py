@@ -195,6 +195,7 @@ class SearchResult:
     snippet: str
     rank: int
     status_code: int
+    indexed_at: str | None
     post_date: str | None
 
 
@@ -242,6 +243,7 @@ def search_pages(
           
 
           p.status_code,
+          p.fetched_at,
           p.post_date
         FROM pages_fts
         JOIN pages p ON p.id = pages_fts.rowid
@@ -282,6 +284,7 @@ def search_pages(
                 snippet=r["snippet"] or "",
                 rank=nice_score(score),
                 status_code=int(r["status_code"]),
+                indexed_at=r["fetched_at"],
                 post_date=r["post_date"],
             )
         )

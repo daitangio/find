@@ -292,6 +292,7 @@ class SearchPagesTests(unittest.TestCase):
         self.assertEqual(
             [result.title for result in results], ["New", "Old", "Undated"]
         )
+        self.assertEqual(results[0].indexed_at, "2024-02-01T00:00:00+00:00")
 
     def test_search_template_links_to_date_sort(self) -> None:
         old_db_path = find_app.DB_PATH
@@ -306,6 +307,21 @@ class SearchPagesTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"orderBy=date", response.data)
+
+    def test_search_template_shows_last_indexed_date_for_each_result(self) -> None:
+        old_db_path = find_app.DB_PATH
+        with tempfile.NamedTemporaryFile() as db:
+            create_search_db(db.name)
+            find_app.DB_PATH = db.name
+            find_app.app.config["TESTING"] = True
+            try:
+                response = find_app.app.test_client().get("/search?q=alpha")
+            finally:
+                find_app.DB_PATH = old_db_path
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Indexed", response.data)
+        self.assertIn(b"4 months ago", response.data)
 
     def test_search_template_preserves_date_sort_in_pagination(self) -> None:
         old_db_path = find_app.DB_PATH
