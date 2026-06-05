@@ -8,6 +8,13 @@ Install on Install your virtualenv with
     pip install -e .
 ```
 
+## Extra skills for codex
+
+```sh
+    rtk init --codex
+    npx skills add JuliusBrussee/caveman -a codex
+```
+
 # Unit test Run
 
     python3 -m unittest discover -s tests && pylint $(git ls-files '*.py')

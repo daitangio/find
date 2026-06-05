@@ -20,12 +20,18 @@ Find is a compact Python search engine for small static sites and blogs. It has 
 - `crawl`: an asyncio crawler that fetches HTML, respects robots.txt, extracts text and links, and writes pages into SQLite.
 - `findgui`: a Flask search UI backed by SQLite FTS5.
 
+Maintenance commands:
+
+- `reindex`: rebuilds and optimizes the FTS table from stored pages.
+- `delete-pages`: deletes indexed pages whose URL matches a regular expression.
+
 The package lives in `src/find`. Runtime entry points are declared in `pyproject.toml`:
 
 ```toml
 crawl = "find.crawl:crawl_init"
 findgui = "find.app:web_run"
 reindex = "find.reindex:main"
+delete-pages = "find.delete_pages:main"
 ```
 
 The default database path is `~/.find.db`, overridden with `SEARCH_DB`.
@@ -37,10 +43,12 @@ src/find/
 ├── __init__.py
 ├── app.py                  # Flask app, search query parsing, result rendering
 ├── crawl.py                # Async crawler, URL normalization, HTML extraction
+├── delete_pages.py         # Delete indexed pages by URL regexp
 ├── reindex.py              # FTS rebuild command
 ├── schema.sql              # SQLite schema, FTS5 table, triggers
 ├── utils.py                # Shared DB/bootstrap, version, robots.txt helpers
 └── templates/
+    ├── about.html
     ├── base.html
     ├── home.html
     ├── page.html
@@ -72,9 +80,11 @@ pip install -e .
 - `pages`: latest page per normalized URL, including title, raw HTML, extracted text, content hash, status, fetch time, and optional post date.
 - `page_versions`: historical snapshots keyed by `(page_id, content_hash)`.
 - `links`: link graph edges from a stored page to normalized outgoing URLs, with optional `to_page_id` backfilled once the target page is known.
+  Tracks `first_seen_at` and `last_seen_at`.
 - `pages_fts`: external-content FTS5 table over `title`, `text`, and `url`, using `porter unicode61`.
 
 Triggers keep `pages_fts` synchronized with `pages` inserts, updates, and deletes. Database connections enable `foreign_keys` and WAL mode.
+Indexes exist on `links.from_page_id`, `links.to_url`, `links.to_page_id`, and `page_versions.page_id`.
 
 ## Crawler Notes
 
@@ -82,7 +92,8 @@ Important functions in `crawl.py`:
 
 - `normalize_url`: accepts only `http` and `https`, strips fragments, lowercases scheme/host, removes default ports, and collapses repeated path slashes.
 - `html_to_text_and_links`: uses BeautifulSoup, removes `script`, `style`, and `noscript`, extracts title/text/links/post date, resolves relative links, and dedupes links in order.
-- `normalize_post_date` and `extract_post_date`: heuristic extraction from `.post_meta .post_date`; stores ISO timestamps when recognized.
+- `remove_nav_content`: clears `<nav>` content before text extraction and link collection.
+- `normalize_post_date`, `normalize_http_date`, and `extract_post_date`: prefer `.post_meta .post_date`, then fall back to HTTP date headers such as `Last-Modified`; store ISO timestamps when recognized.
 - `auto_tune_concurrency`: derives worker count from politeness delay, with range `2..200`.
 - `Crawler.db_writer`: the only database writer. It consumes `PageJob` items from a queue sized at `concurrency * 5`.
 
@@ -91,7 +102,9 @@ Crawler behavior:
 - Defaults to same-host crawling.
 - `--include-pattern` restricts the crawl frontier to URLs matching a Python regular expression.
 - Uses a shared politeness delay across workers, default `0.190` seconds.
+- Default request timeout is `5` seconds; default page size cap is `2_000_000` bytes.
 - Fetches robots.txt per origin through `utils.get_robots_parser` and caches parsers.
+- Robots policy handling is explicit: `401` and `403` mean disallow all, other `4xx` mean allow all, `5xx` mean disallow all, and fetch errors fall back to allow all.
 - Uses `Find/{version} (+https://github.com/daitangio/find)` as User-Agent.
 - Skips non-HTML and oversized pages.
 - Indexes only `200` responses; non-`200` responses are skipped before indexing.
@@ -110,6 +123,7 @@ Use `--no-same-host` carefully; it permits the crawl frontier to leave seed host
 `app.py` exposes:
 
 - `GET /`: home/search form.
+- `GET /about`: simple crawl stats page showing stored URL counts grouped by origin.
 - `GET /search`: FTS search with query parsing, pagination, and sort by relevance or date.
 - `GET /page/<id>`: cached HTML page view, registered only when `FIND_SHOW_CACHED_PAGE` is enabled.
 
@@ -117,6 +131,7 @@ Search protections:
 
 - Flask-Limiter default: `400 per day`, `30 per hour`; `/search` has `20 per minute`.
 - Query limits: `MAX_QUERY_LENGTH = 150`, `MAX_QUERY_TERMS = 12`.
+- Pagination limits: `limit` defaults to `10`, accepts `1..50`; `offset` defaults to `0` and must be non-negative.
 - Searches run in a `ThreadPoolExecutor(max_workers=4)` and time out after `1.1` seconds.
 
 Search query parsing supports:
@@ -126,7 +141,14 @@ Search query parsing supports:
 - Google-like `site:example.com`, translated to `url:"example.com"`.
 - Quoting of punctuation-only or unsafe bare tokens before sending to SQLite FTS5.
 
+Search result behavior:
+
+- Ranking combines weighted `bm25()` scoring with an inbound-link boost from the `links` table.
+- Weights are configurable through `LINK_BOOST_WEIGHT` and `LINK_BOOST_CAP`.
+- Snippets are rendered with `<mark>` highlights.
+
 `FIND_SHOW_CACHED_PAGE` is parsed as an environment flag. Enabled values include `1`, `true`, `yes`, `on`, `enabled`, and `enable`; disabled values include `0`, `false`, `no`, `off`, `disabled`, and `disable`.
+When cached page display is enabled, `page()` also detects HTML meta-refresh redirects and passes them to the template.
 
 ## Reindex Command
 
@@ -138,12 +160,33 @@ reindex --db ~/.find.db
 
 It requires an existing database. It will not create one.
 
+Implementation details:
+
+- Clears `pages_fts` with the FTS5 `delete-all` command.
+- Runs `rebuild`, then `optimize`.
+- Verifies the final FTS row count against `pages`.
+
+## Delete Pages Command
+
+`delete_pages.py` deletes indexed pages whose URL matches a regular expression.
+
+```sh
+delete-pages '/docs/' --db ~/.find.db
+```
+
+Notes:
+
+- It requires an existing database.
+- It deletes from `pages`; `page_versions`, `links`, and `pages_fts` are cleaned up through foreign keys and triggers.
+- Invalid regular expressions fail fast with a Click error.
+
 ## Tests
 
 The test suite is under `tests/`:
 
 - `test_app.py`: search query parsing, date formatting, search ordering, cached page feature flag, template version rendering.
-- `test_crawl.py`: URL normalization, HTML extraction, post date extraction, host restriction, concurrency auto-tuning.
+- `test_crawl.py`: URL normalization, HTML extraction, nav stripping, post date extraction, host restriction, fetch size handling, and concurrency auto-tuning.
+- `test_delete_pages.py`: URL-regexp deletion behavior and CLI validation.
 - `test_page_ranking.py`: inbound-link boost behavior, cap handling, and BM25 title weighting.
 - `test_robots.py`: robots.txt fetching, parsing, cache behavior, and common status handling.
 
@@ -171,6 +214,7 @@ python3 -m unittest discover -s tests && pylint $(git ls-files '*.py')
 - If changing schema or FTS behavior, update `schema.sql`, relevant tests, and reindex guidance.
 - If changing search query parsing, add or update tests in `tests/test_app.py`.
 - If changing crawl policy or extraction, add or update tests in `tests/test_crawl.py` or `tests/test_robots.py`.
+- If changing deletion behavior, add or update tests in `tests/test_delete_pages.py`.
 
 ## Deployment Notes
 
@@ -206,3 +250,7 @@ FLASK_DEBUG=true findgui
 - 2026-05-28: Corrected Docker compose host port mapping to `49152:7001` after re-validation.
 - 2026-05-28: Missing: re-check this document whenever runtime behavior or configuration changes.
 - 2026-05-31: Added crawler `--include-pattern` note; missing: re-check after future crawler option changes.
+- 2026-06-04: Synced `AGENTS.md` to current `src/find` implementation: added `delete-pages`, `/about`, `about.html`, crawler date/nav details, search pagination/ranking notes, and `test_delete_pages.py`.
+- 2026-06-04: Missing: re-check this document after future CLI additions or Flask route/template changes.
+
+@RTK.md
