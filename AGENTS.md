@@ -252,5 +252,7 @@ FLASK_DEBUG=true findgui
 - 2026-05-31: Added crawler `--include-pattern` note; missing: re-check after future crawler option changes.
 - 2026-06-04: Synced `AGENTS.md` to current `src/find` implementation: added `delete-pages`, `/about`, `about.html`, crawler date/nav details, search pagination/ranking notes, and `test_delete_pages.py`.
 - 2026-06-04: Missing: re-check this document after future CLI additions or Flask route/template changes.
+- 2026-06-05: Fixed `src/find/app.py` test regressions: preserve tiny BM25 deltas in `nice_score`, order `/about` origin logic changed and test updated by GG
+- 2026-06-05: Missing: if date-format behavior changes again, re-check whether test-only frozen time still matches expected template output.
 
 @RTK.md

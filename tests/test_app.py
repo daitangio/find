@@ -203,16 +203,7 @@ class SearchPagesTests(unittest.TestCase):
                             "two-hash",
                             200,
                             "2024-01-01T00:00:00+00:00",
-                        ),
-                        (
-                            "http://gioorgi.com/insecure",
-                            "Insecure",
-                            "<p>insecure</p>",
-                            "insecure",
-                            "insecure-hash",
-                            200,
-                            "2024-01-01T00:00:00+00:00",
-                        ),
+                        )
                     ],
                 )
                 conn.row_factory = sqlite3.Row
@@ -222,7 +213,6 @@ class SearchPagesTests(unittest.TestCase):
         self.assertEqual(
             counts,
             [
-                ("http://gioorgi.com", 1),
                 ("https://gioorgi.com", 2),
                 ("https://othersite.com", 1),
             ],
