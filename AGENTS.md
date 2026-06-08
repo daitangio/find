@@ -254,5 +254,6 @@ FLASK_DEBUG=true findgui
 - 2026-06-04: Missing: re-check this document after future CLI additions or Flask route/template changes.
 - 2026-06-05: Fixed `src/find/app.py` test regressions: preserve tiny BM25 deltas in `nice_score`, order `/about` origin logic changed and test updated by GG
 - 2026-06-05: Missing: if date-format behavior changes again, re-check whether test-only frozen time still matches expected template output.
+- 2026-06-08: Added workspace custom agent `.github/agents/python-code-review.agent.md` for Python code/test review with max-7 prioritized improvements and optional targeted test execution.
 
 @RTK.md
