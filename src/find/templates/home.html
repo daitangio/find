@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block body %}
 <form action="{{ url_for('search') }}" method="get">
-  <input type="text" name="q" placeholder="Search..." value="{{ q|default('') }}" autofocus>
+  <input type="text" name="q" placeholder="Search..." size="64" value="{{ q|default('') }}" autofocus>
   <button type="submit">Search</button>
 </form>
 
