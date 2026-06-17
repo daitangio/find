@@ -8,3 +8,4 @@ __pycache__/
 *deploy*.sh
 .agents/skills/screenshot
 doc/
+.DS_Store
