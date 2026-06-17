@@ -255,5 +255,7 @@ FLASK_DEBUG=true findgui
 - 2026-06-05: Fixed `src/find/app.py` test regressions: preserve tiny BM25 deltas in `nice_score`, order `/about` origin logic changed and test updated by GG
 - 2026-06-05: Missing: if date-format behavior changes again, re-check whether test-only frozen time still matches expected template output.
 - 2026-06-08: Added workspace custom agent `.github/agents/python-code-review.agent.md` for Python code/test review with max-7 prioritized improvements and optional targeted test execution.
+- 2026-06-17: Closed test-side SQLite connections explicitly in `tests/test_app.py`, `tests/test_page_ranking.py`, and `tests/test_delete_pages.py` to remove Python 3.13 `ResourceWarning` noise about unclosed databases.
+- 2026-06-17: Missing: re-check future tests for `sqlite3.connect(...)` usage since `with conn:` does not close the connection.
 
 @RTK.md
