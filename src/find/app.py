@@ -194,7 +194,7 @@ class SearchResult:
     url: str | None
     title: str | None
     snippet: str
-    rank: int
+    rank: float
     status_code: int
     indexed_at: str | None
     post_date: str | None
