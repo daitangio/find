@@ -70,6 +70,7 @@ delete-pages = "find.delete_pages:main"
 ```
 
 The default database path is `~/.find.db`, overridden with `SEARCH_DB`.
+`utils.ensure_database_present()` creates the database for crawl runs, while `findgui`, `reindex`, and `delete-pages` require an existing database.
 
 ## Current Source Layout
 
@@ -129,7 +130,7 @@ Important functions in `crawl.py`:
 - `html_to_text_and_links`: uses BeautifulSoup, removes `script`, `style`, and `noscript`, extracts title/text/links/post date, resolves relative links, and dedupes links in order.
 - `remove_nav_content`: clears `<nav>` content before text extraction and link collection.
 - `normalize_post_date`, `normalize_http_date`, and `extract_post_date`: prefer `.post_meta .post_date`, then fall back to HTTP date headers such as `Last-Modified`; store ISO timestamps when recognized.
-- `auto_tune_concurrency`: derives worker count from politeness delay, with range `2..200`.
+- `auto_tune_concurrency`: when `--concurrency=-1`, derives worker count from politeness delay with `min(max(2, int(1 // delay) - 1), 200)`.
 - `Crawler.db_writer`: the only database writer. It consumes `PageJob` items from a queue sized at `concurrency * 5`.
 
 Crawler behavior:
@@ -143,7 +144,7 @@ Crawler behavior:
 - Uses `Find/{version} (+https://github.com/daitangio/find)` as User-Agent.
 - Skips non-HTML and oversized pages.
 - Indexes only `200` responses; non-`200` responses are skipped before indexing.
-- Stores a new page version only when the HTML content hash changes.
+- Stores a new page version only when the HTML content hash changes; otherwise it refreshes fetch metadata on `pages`.
 
 Typical crawl command:
 
@@ -158,7 +159,7 @@ Use `--no-same-host` carefully; it permits the crawl frontier to leave seed host
 `app.py` exposes:
 
 - `GET /`: home/search form.
-- `GET /about`: simple crawl stats page showing stored URL counts grouped by origin.
+- `GET /about`: simple crawl stats page showing stored URL counts grouped by origin and ordered by descending count.
 - `GET /search`: FTS search with query parsing, pagination, and sort by relevance or date.
 - `GET /page/<id>`: cached HTML page view, registered only when `FIND_SHOW_CACHED_PAGE` is enabled.
 
@@ -174,13 +175,16 @@ Search query parsing supports:
 - FTS operators: `AND`, `OR`, `NOT`.
 - Column queries: `title:...`, `text:...`, `url:...`.
 - Google-like `site:example.com`, translated to `url:"example.com"`.
-- Quoting of punctuation-only or unsafe bare tokens before sending to SQLite FTS5.
+- Quoted phrases with either single or double quotes.
+- Quoting of punctuation-only or otherwise unsafe bare tokens before sending to SQLite FTS5.
 
 Search result behavior:
 
 - Ranking combines weighted `bm25()` scoring with an inbound-link boost from the `links` table.
 - Weights are configurable through `LINK_BOOST_WEIGHT` and `LINK_BOOST_CAP`.
+- Results may prefer title matches over body matches because `BM25_TITLE_WEIGHT`, `BM25_TEXT_WEIGHT`, and `BM25_URL_WEIGHT` are weighted differently.
 - Snippets are rendered with `<mark>` highlights.
+- Invalid parsed FTS expressions fail with HTTP `400`; search timeouts fail with HTTP `504`.
 
 `FIND_SHOW_CACHED_PAGE` is parsed as an environment flag. Enabled values include `1`, `true`, `yes`, `on`, `enabled`, and `enable`; disabled values include `0`, `false`, `no`, `off`, `disabled`, and `disable`.
 When cached page display is enabled, `page()` also detects HTML meta-refresh redirects and passes them to the template.
@@ -212,7 +216,7 @@ delete-pages '/docs/' --db ~/.find.db
 Notes:
 
 - It requires an existing database.
-- It deletes from `pages`; `page_versions`, `links`, and `pages_fts` are cleaned up through foreign keys and triggers.
+- It deletes from `pages`; matching `page_versions` and FTS rows are removed automatically, `links.from_page_id` rows cascade away, and inbound `links.to_page_id` references are nulled by foreign keys.
 - Invalid regular expressions fail fast with a Click error.
 
 ## Tests
@@ -257,9 +261,10 @@ Docker:
 
 - Image base: `python:3.14-slim-trixie`
 - App runs as non-root `app`.
-- `initAndFind.sh` is the container command.
+- `initAndFind.sh` is the container command. It bootstraps the database with a tiny crawl, starts `gunicorn`, then loops scheduled crawls.
+- Docker image default `FIND_WEB_WORKERS` is `4`; `docker-compose.yml` overrides it to `2`.
 - Compose maps host port `49152` to container port `7001`.
-- Compose uses `SEARCH_DB=/opt/find/search.db`, `FIND_WEB_WORKERS=2`, `REINDEX_INTERVAL_HOURS=36`, and `FIND_SHOW_CACHED_PAGE=disabled`.
+- Compose uses `SEARCH_DB=/opt/find/search.db`, `REINDEX_INTERVAL_HOURS=36`, and `FIND_SHOW_CACHED_PAGE=disabled`.
 - Persistent data is mounted from `$FIND_HOME` to `/opt/find`.
 
 For the web UI locally:
@@ -268,6 +273,7 @@ For the web UI locally:
 FLASK_DEBUG=true findgui
 ```
 
+`devRun.sh` runs the local UI with `FIND_SHOW_CACHED_PAGE=true`.
 `web_run()` binds Flask to `0.0.0.0:7001`.
 
 ## Known Tradeoffs
@@ -276,4 +282,3 @@ FLASK_DEBUG=true findgui
 - The crawler indexes static HTML only; it does not execute JavaScript.
 - Search ranking combines BM25 with an inbound-link boost and date sorting; it is not full PageRank.
 - Cached page display intentionally renders stored HTML when enabled, so treat it as a feature with an explicit trust boundary.
-
