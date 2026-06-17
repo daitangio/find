@@ -42,16 +42,18 @@ def ensure_database_present(db_file: str, create_if_missing: bool = True):
         if create_if_missing:
             print(f"*** [INIT] Creating {db_file}")
             db = sqlite3.connect(db_file)
-            if not fts5_available(db):
-                raise SystemError("FTS5 needs to be available")
-            schema_sql = (
-                resources.files("find")
-                .joinpath("schema.sql")
-                .read_text(encoding="utf-8")
-            )
-            db.executescript(schema_sql)
-            db.commit()
-            db.close()
+            try:
+                if not fts5_available(db):
+                    raise SystemError("FTS5 needs to be available")
+                schema_sql = (
+                    resources.files("find")
+                    .joinpath("schema.sql")
+                    .read_text(encoding="utf-8")
+                )
+                db.executescript(schema_sql)
+                db.commit()
+            finally:
+                db.close()
         else:
             print(
                 f"*** [ERROR] Database {db_file} not found. Run crawl first to create it."

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import atexit
 import os,logging
 import sqlite3
 
@@ -66,6 +67,7 @@ LINK_BOOST_CAP = int(os.environ.get("LINK_BOOST_CAP", "20"))
 
 # Thread pool for timeout-protected search operations (DDoS protection 3)
 _search_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="search")
+atexit.register(_search_executor.shutdown, wait=False)
 # Unused for the meantime
 
 ###########################################################
