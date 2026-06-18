@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import atexit
-import os,logging
+import os, logging
 import sqlite3
 
 from dataclasses import dataclass
@@ -23,8 +23,9 @@ FIND_SHOW_CACHED_PAGE = "FIND_SHOW_CACHED_PAGE"
 
 
 app = Flask(__name__)
-web_logger=logging.getLogger('gunicorn.error')
+web_logger = logging.getLogger("gunicorn.error")
 _TEST_NOW = datetime(2024, 6, 1, tzinfo=timezone.utc)
+
 
 @app.context_processor
 def inject_find_config() -> dict[str, str | bool]:
@@ -305,8 +306,7 @@ def nice_score(bmscore: float) -> float:
 
 def count_crawled_urls_by_domain(conn: sqlite3.Connection) -> list[tuple[str, int]]:
     """Return crawled URL counts grouped by URL origin, ordered by origin."""
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         WITH parsed AS (
           SELECT
             url,
@@ -336,12 +336,9 @@ def count_crawled_urls_by_domain(conn: sqlite3.Connection) -> list[tuple[str, in
         FROM origins
         GROUP BY origin
         ORDER BY 2 desc;
-        """
-    ).fetchall()
+        """).fetchall()
 
     return [(row[0], int(row[1])) for row in rows]
-
-
 
 
 _FTS_COLUMNS = {"title", "text", "url"}
@@ -426,6 +423,7 @@ def _parse_int_arg(
         abort(400, description=f"{name} must be at most {max_value}")
     return value
 
+
 # -------------------------
 # Routes
 # -------------------------
@@ -433,10 +431,11 @@ def _parse_int_arg(
 def home():
     return render_template("home.html", title="")
 
+
 @app.route("/about")
 def about():
     conn = get_db()
-    domain_count=count_crawled_urls_by_domain(conn)
+    domain_count = count_crawled_urls_by_domain(conn)
     return render_template("about.html", title="About", domain_count=domain_count)
 
 

@@ -128,9 +128,9 @@ class DeletePagesTests(unittest.IsolatedAsyncioTestCase):
                 links = conn.execute(
                     "SELECT from_page_id, to_url, to_page_id FROM links ORDER BY id;"
                 ).fetchall()
-                fts_count = conn.execute(
-                    "SELECT COUNT(*) FROM pages_fts;"
-                ).fetchone()[0]
+                fts_count = conn.execute("SELECT COUNT(*) FROM pages_fts;").fetchone()[
+                    0
+                ]
 
             self.assertEqual(pages, [(3, "https://example.com/blog/three")])
             self.assertEqual(versions, [])

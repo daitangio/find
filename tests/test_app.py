@@ -204,7 +204,7 @@ class SearchPagesTests(unittest.TestCase):
                             "two-hash",
                             200,
                             "2024-01-01T00:00:00+00:00",
-                        )
+                        ),
                     ],
                 )
                 conn.row_factory = sqlite3.Row

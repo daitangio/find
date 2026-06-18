@@ -213,7 +213,7 @@ def normalize_http_date(raw: str | None) -> str | None:
         return normalized
     try:
         parsed = parsedate_to_datetime(raw)
-    except (TypeError, ValueError, IndexError):
+    except TypeError, ValueError, IndexError:
         return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
