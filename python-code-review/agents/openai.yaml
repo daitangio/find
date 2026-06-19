@@ -1,0 +1,7 @@
+interface:
+  display_name: "Python Review"
+  short_description: "Review Python code and tests"
+  default_prompt: "Use $python-code-review to review Python source and tests in this repository, prioritize material findings, and write the review to a dated markdown file under review/."
+
+policy:
+  allow_implicit_invocation: true

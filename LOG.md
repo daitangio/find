@@ -15,3 +15,5 @@
 - 2026-06-17: Missing: re-check future tests for `sqlite3.connect(...)` usage since `with conn:` does not close the connection.
 - 2026-06-17: Updated `AGENTS.md` to match current code in `src/find` and runtime files. Corrected database lifecycle notes, clarified crawler concurrency and metadata-refresh behavior, tightened search and delete-pages documentation, and aligned Docker notes with `Dockerfile`, `docker-compose.yml`, and `initAndFind.sh`.
 - 2026-06-17: Missing after this pass: none for the requested task. Verification still needs to run.
+- 2026-06-19: Converted `.github/agents/python-code-review.agent.md` into a project-local Codex skill at `python-code-review/` with `SKILL.md` and `agents/openai.yaml`; kept it repo-scoped rather than global under `~/.codex/skills`.
+- 2026-06-19: Missing: validate local Codex discovery against the actual client if this repo later standardizes on a different workspace-local skills path.
