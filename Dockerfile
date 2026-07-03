@@ -23,6 +23,8 @@ RUN python -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); prin
 RUN pip install --user -r requirements.txt
 # RUN ls /home/app/.cache/
 
+RUN pip install --upgrade pip
+
 COPY tests tests
 COPY src src
 COPY README.md .

@@ -2,6 +2,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 
 from click.testing import CliRunner
 
@@ -12,7 +13,7 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 
 def create_delete_db(path: str) -> None:
     schema_path = os.path.join(ROOT, "src", "find", "schema.sql")
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         with open(schema_path, encoding="utf-8") as schema:
             conn.executescript(schema.read())
         conn.executemany(
@@ -117,7 +118,7 @@ class DeletePagesTests(unittest.IsolatedAsyncioTestCase):
             deleted = await delete_pages_by_pattern(db.name, r"/docs/")
 
             self.assertEqual(deleted, 2)
-            with sqlite3.connect(db.name) as conn:
+            with closing(sqlite3.connect(db.name)) as conn:
                 pages = conn.execute(
                     "SELECT id, url FROM pages ORDER BY id;"
                 ).fetchall()
@@ -127,9 +128,9 @@ class DeletePagesTests(unittest.IsolatedAsyncioTestCase):
                 links = conn.execute(
                     "SELECT from_page_id, to_url, to_page_id FROM links ORDER BY id;"
                 ).fetchall()
-                fts_count = conn.execute(
-                    "SELECT COUNT(*) FROM pages_fts;"
-                ).fetchone()[0]
+                fts_count = conn.execute("SELECT COUNT(*) FROM pages_fts;").fetchone()[
+                    0
+                ]
 
             self.assertEqual(pages, [(3, "https://example.com/blog/three")])
             self.assertEqual(versions, [])
@@ -146,7 +147,7 @@ class DeletePagesTests(unittest.IsolatedAsyncioTestCase):
             deleted = await delete_pages_by_pattern(db.name, r"/missing/")
 
             self.assertEqual(deleted, 0)
-            with sqlite3.connect(db.name) as conn:
+            with closing(sqlite3.connect(db.name)) as conn:
                 page_count = conn.execute("SELECT COUNT(*) FROM pages;").fetchone()[0]
             self.assertEqual(page_count, 3)
 

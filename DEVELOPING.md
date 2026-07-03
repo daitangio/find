@@ -8,6 +8,12 @@ Install on Install your virtualenv with
     pip install -e .
 ```
 
+If you prefer uv just run
+
+```sh
+    uv sync
+```
+
 ## Extra skills for codex
 
 ```sh
@@ -17,7 +23,8 @@ Install on Install your virtualenv with
 
 # Unit test Run
 
-    python3 -m unittest discover -s tests && pylint $(git ls-files '*.py')
+See etc/pre-commit script for sanity checks you can use before pushing your changes
+
     
 # Dockerized test run
 

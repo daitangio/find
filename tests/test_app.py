@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 
+from contextlib import closing
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -23,7 +24,7 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 
 def create_search_db(path: str) -> None:
     schema_path = os.path.join(ROOT, "src", "find", "schema.sql")
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         with open(schema_path, encoding="utf-8") as schema:
             conn.executescript(schema.read())
         conn.executemany(
@@ -166,7 +167,7 @@ class SearchPagesTests(unittest.TestCase):
     def test_count_crawled_urls_by_domain_groups_by_url_origin(self) -> None:
         with tempfile.NamedTemporaryFile() as db:
             schema_path = os.path.join(ROOT, "src", "find", "schema.sql")
-            with sqlite3.connect(db.name) as conn:
+            with closing(sqlite3.connect(db.name)) as conn, conn:
                 with open(schema_path, encoding="utf-8") as schema:
                     conn.executescript(schema.read())
                 conn.executemany(
@@ -203,7 +204,7 @@ class SearchPagesTests(unittest.TestCase):
                             "two-hash",
                             200,
                             "2024-01-01T00:00:00+00:00",
-                        )
+                        ),
                     ],
                 )
                 conn.row_factory = sqlite3.Row
@@ -221,7 +222,7 @@ class SearchPagesTests(unittest.TestCase):
     def test_search_pages_weights_title_matches_above_text_matches(self) -> None:
         with tempfile.NamedTemporaryFile() as db:
             schema_path = os.path.join(ROOT, "src", "find", "schema.sql")
-            with sqlite3.connect(db.name) as conn:
+            with closing(sqlite3.connect(db.name)) as conn, conn:
                 with open(schema_path, encoding="utf-8") as schema:
                     conn.executescript(schema.read())
                 conn.executemany(

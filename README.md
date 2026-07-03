@@ -8,7 +8,7 @@ Find is a super-minimal search engine based on SQLite Full Text Search capabilit
 
 Find is so powerful we decided to open source instead of selling it, to avoid collapsing FAAMG data centers (=Facebook Apple, Amazon, Microsoft, Google). It is written with the help of ChatGPT Codex + Claude Code (and yes we was joking about its power).
 
-Find is composed of two commands:
+Find is composed of two main commands:
 
 - [A Simple web crawler](./src/find/crawl.py) which uses asyncio to maximize index ingestion speed.
 - [A Flask app to enable end-users to find](./src/find/app.py) things.
@@ -22,6 +22,9 @@ Find is composed of two commands:
 - Date are read from the document if found, or by the web server header
 
 (Back link ranking tuning is in progress)
+
+Take a look at [./PROJECT_REFERENCE.md] for more technical details.
+
 
 And remember [Find won't search for Chuck Norris because it knows you don't find Chuck Norris, he finds you.](https://api.chucknorris.io/jokes/1jgggc4rruety6zvlvb5ag)
 
@@ -50,7 +53,7 @@ Initial prompt was
 
 > Design a small python web application to implement a search engine.
 > The search must be performed on a SQLite database using
-> the SQLite Full Text Search (FTS5) extension.
+> [The SQLite Full Text Search (FTS5) extension.](https://sqlite.org/fts5.html)
 > Design the database model to be able to store simple html web pages.
 
 ## Features
@@ -65,49 +68,4 @@ It just works out of the box.
 As a basic rule I will try to keep it below 2000 lines of code.
 
 The project accepts pull requests: please open it adding a comment. Ensure the change passes the pylint checks.
-
-## How
-
-[SQLite has a full text search capability called FTS5](https://sqlite.org/fts5.html) which offers out of the box also stemming for english language.
-
-Upon ChatGPT suggestion we added a simple inbound-link-count score boost in version 0.0.6.
-
-ChatGPT for the crawler proposed asyncio I/O (aiohttp & aiosqlite libraries), which is a very good approach to scale the crawler: downloading web pages is a very I/O bound activity and it benefits from a non-blocking library.
-
-Initial implementation has a locking problem: we solved it with a mono-writer database task. 
-SQLite is so fast you have an hard time to tune the writer queue: it is very difficult to saturate it.
-To avoid data loss, I opted for a queue 4x the concurrency level.
-
-The crawler has a default delay to avoid overloading the target site. For this reason, it is pointless to have too much concurrency if your default delay is high.
-
-The overall project aims to be very compact (*less is more* mantra)
-
-## Utility commands
-
-### reindex
-The reindex command can be used to re-index the database
-
-# Links
-
-The links table is collected and used from version 0.0.6.
-   Example query:
-
-    ```sql
-    SELECT p.url, COUNT(*) AS out_links
-    FROM links l JOIN pages p ON p.id = l.from_page_id
-    GROUP BY p.id
-    ORDER BY out_links DESC
-    LIMIT 20;
-    ```
-
-# Next Step and Roadmap
-
-    
-1) Ability to classify categories and tags on the full text search can be useful for faceting and classification.
-"Auto discovery" of the taxonomies can be further idea
-
-## Docker compose and auto-index mode
-
-Be happy!
-
 

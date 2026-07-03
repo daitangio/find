@@ -2,6 +2,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from unittest.mock import patch
 
 import find.app as find_app
@@ -14,7 +15,7 @@ def create_rank_db(
     path: str, pages: list[tuple], links: list[tuple] | None = None
 ) -> None:
     schema_path = os.path.join(ROOT, "src", "find", "schema.sql")
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         with open(schema_path, encoding="utf-8") as schema:
             conn.executescript(schema.read())
         conn.executemany(

@@ -213,7 +213,7 @@ def normalize_http_date(raw: str | None) -> str | None:
         return normalized
     try:
         parsed = parsedate_to_datetime(raw)
-    except (TypeError, ValueError, IndexError):
+    except TypeError, ValueError, IndexError:
         return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
@@ -503,7 +503,7 @@ class Crawler:
         if self.delay_s <= 0:
             return
         async with self._rate_lock:
-            now = asyncio.get_event_loop().time()
+            now = asyncio.get_running_loop().time()
             wait = (self._last_fetch_ts + self.delay_s) - now
             self._last_fetch_ts = now + max(wait, 0)
 
@@ -696,7 +696,6 @@ class Crawler:
                     if fr.error != "non-html":
                         print(f"[{wid}] [WARN] skip {url} ({fr.status} / {fr.error})")
                     continue
-                fr.html = remove_nav_content(fr.html)
                 title, text, links, post_date = html_to_text_and_links(
                     url, fr.html, wid, fr.document_date
                 )
@@ -729,7 +728,7 @@ class Crawler:
                 self.q.task_done()
 
     async def logger(self) -> None:
-        start_ts = asyncio.get_event_loop().time()
+        start_ts = asyncio.get_running_loop().time()
         start_iso = now_iso()
         # Ensure Sample time is no little than 12 seconds and no more than 60 seconds
         sample_time = min(max(((self.concurrency * self.delay_s) / 2), 12.0), 60)
@@ -745,7 +744,7 @@ class Crawler:
                 url_queue_size = self.q.qsize()
                 writer_current_queue_size = self.dbq.qsize()
                 writer_max_size = self.max_reached_size
-                elapsed_s = asyncio.get_event_loop().time() - start_ts
+                elapsed_s = asyncio.get_running_loop().time() - start_ts
                 pages_per_s = self.fetched_count / elapsed_s if elapsed_s > 0 else 0.0
                 ratio = 100 * pages_per_s / expected_page_for_seconds
                 print(
