@@ -48,16 +48,20 @@
   <img src="https://gioorgi.com/logos/vic20-anim.gif">
   <h1><a href="{{ url_for('home') }}">Find</a> {{ title}} </h1>
   <div class="main">
-        <a href="/about">Well come to Find</a>, a small search application for all gioorgi.com sites.        
-        <div class="tip">Some Tips:
-        <ul>
-          <li>Use FTS queries like <a href="/search?q=sqlite+OR+postgres">sqlite OR postgres</a>,
-          <a href="/search?q=title%3Agit">title:git</a>, use double quote to search exact phrases like <a href="/search?q=title%3Agit">"title git"</a>
-          <li>Google-like <a href="/search?q=site:8bit.gioorgi.com">site:8bit.gioorgi.com syntax</a> is supported, for instance to search only on companion sites
-          <li><a href="/search?q=site:fatlama.substack.com">Fatlama, newsletter GenAI in Italiano [Italian GenAI newsletter]</a></li>
-        </ul>
-        </div>
-        Note: a rate limiter is active by default.
+        <a href="/about">Well come to Find</a>, a small search application for all gioorgi.com sites.    
+        <!-- Ref https://chrisburnell.com/html-can-do-that/ -->
+        <details name="SomeTips">
+	      <summary>How to search</summary>        
+          <div class="tip">Some Tips:
+          <ul>
+            <li>Use FTS queries like <a href="/search?q=sqlite+OR+postgres">sqlite OR postgres</a>,
+            <a href="/search?q=title%3Agit">title:git</a>, use double quote to search exact phrases like <a href="/search?q=title%3Agit">"title git"</a>
+            <li>Google-like <a href="/search?q=site:8bit.gioorgi.com">site:8bit.gioorgi.com syntax</a> is supported, for instance to search only on companion sites
+            <li><a href="/search?q=site:fatlama.substack.com">Fatlama, newsletter GenAI in Italiano [Italian GenAI newsletter]</a></li>
+          </ul>
+          </div>
+          Note: a rate limiter is active by default.
+        </details>    
         <p>
         {% block body %}{% endblock %}
         </p>

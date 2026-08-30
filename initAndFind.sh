@@ -17,7 +17,7 @@ while true; do
  echo ======================================================================
  # Separated for the meantime
  # https://www.ilpost.it/2026/05/31/
- # crawl --seed https://ilpost.it/$(date +%Y/%m/%d) --include-pattern ilpost.it/$(date +%Y/%m) --max-pages 50
+ # crawl --seed https://ilpost.it/$(date +%Y/%m/%d) --include-pattern ilpost.it/$(date +%Y/%m) --max-pages 55
  crawl --seed https://fatlama.substack.com  --seed https://fatlama.substack.com/p/chi-ha-paura-dellopen-source \
     --same-host --max-pages 100
  # crawl --seed https://8bit.gioorgi.com --same-host
