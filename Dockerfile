@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FIND_WEB_WORKERS=4
 ENV PATH="$PATH:/home/app/.local/bin"
 
+RUN apt update -y && apt install -y sqlite3
 RUN addgroup --gid 1000  app && adduser --uid 1000 --ingroup app  app
 USER app
 
@@ -37,4 +38,5 @@ RUN python3 -m unittest discover -s tests
 # RUN pylint $(git ls-files '*.py')
 
 COPY initAndFind.sh .
+COPY --chown=1000:1000 src/find/sql ./sql
 CMD ["./initAndFind.sh"]

@@ -9,3 +9,6 @@ __pycache__/
 .agents/skills/screenshot
 doc/
 .DS_Store
+
+# graphify-axet
+.graphify/

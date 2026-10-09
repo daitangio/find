@@ -14,7 +14,11 @@ echo Reindex will occur every $REINDEX_INTERVAL_HOURS hours
 echo ======================================================================
 while true; do
  date
- echo ======================================================================
+ echo "Housekeeping"
+ ls -l sql
+ set -x
+ time sqlite3 -batch  $SEARCH_DB '.read ./sql/00-housekeeping.sql'
+ echo ====================================================================== 
  # Separated for the meantime
  # https://www.ilpost.it/2026/05/31/
  # crawl --seed https://ilpost.it/$(date +%Y/%m/%d) --include-pattern ilpost.it/$(date +%Y/%m) --max-pages 55
